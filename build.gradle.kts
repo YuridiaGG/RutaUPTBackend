@@ -7,6 +7,11 @@ plugins {
 group = "com.example.rutaupt"
 version = "1.0.0"
 
+repositories {
+    mavenCentral()
+    google()
+}
+
 application {
     mainClass.set("com.example.rutaupt.ApplicationKt")
 }
@@ -18,13 +23,17 @@ tasks.jar {
 
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-    from(configurations.runtimeClasspath.get().map {
-        if (it.isDirectory) it else zipTree(it)
+    // Esta es la forma correcta y perezosa (lazy) de incluir las dependencias en el JAR
+    // sin que Gradle falle durante la sincronización inicial.
+    from({
+        configurations.runtimeClasspath.get().map {
+            if (it.isDirectory) it else zipTree(it)
+        }
     })
 }
 
 dependencies {
-    // Logger implementation
+    // Logger
     implementation(libs.logback)
 
     // Ktor Server
