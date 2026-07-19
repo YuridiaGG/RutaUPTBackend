@@ -8,7 +8,6 @@ import kotlinx.coroutines.withContext
 import java.util.*
 
 object EmailService {
-    // REQUISITO: La función de enviar correo debe ejecutarse en un Dispatchers.IO para no bloquear el servidor.
     suspend fun sendPasswordRecoveryEmail(name: String, to: String, password: String): Boolean = withContext(Dispatchers.IO) {
         val smtpHost = System.getenv("SMTP_HOST")?.trim() ?: "smtp.gmail.com"
         val smtpPort = System.getenv("SMTP_PORT")?.trim() ?: "465"
@@ -24,17 +23,21 @@ object EmailService {
             put("mail.smtp.host", smtpHost)
             put("mail.smtp.port", smtpPort)
             put("mail.smtp.auth", "true")
-            
-            // Configuración robusta para Puerto 465 (SSL)
-            put("mail.smtp.ssl.enable", "true")
-            put("mail.smtp.socketFactory.port", smtpPort)
-            put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory")
             put("mail.smtp.ssl.trust", smtpHost)
             
-            // Timeouts para evitar que el servidor se quede colgado (demora mucho)
-            put("mail.smtp.connectiontimeout", "10000") 
-            put("mail.smtp.timeout", "10000")
-            put("mail.smtp.writetimeout", "10000")
+            // Lógica para Puerto 465 (SSL Directo) - Recomendado para Railway
+            if (smtpPort == "465") {
+                put("mail.smtp.ssl.enable", "true")
+                put("mail.smtp.socketFactory.port", smtpPort)
+                put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory")
+            } else {
+                // Lógica para Puerto 587 (STARTTLS)
+                put("mail.smtp.starttls.enable", "true")
+                put("mail.smtp.starttls.required", "true")
+            }
+
+            put("mail.smtp.connectiontimeout", "15000") 
+            put("mail.smtp.timeout", "15000")
         }
 
         val session = Session.getInstance(props, object : Authenticator() {
@@ -49,13 +52,12 @@ object EmailService {
                 setText("Hola $name, tus credenciales de acceso para RutaUPT son: Email: $to | Contraseña: $password")
             }
             
-            println("Intentando enviar correo a $to por el puerto $smtpPort...")
+            println("Iniciando envío a $to usando puerto $smtpPort...")
             Transport.send(message)
-            println("¡ÉXITO: Correo enviado correctamente!")
+            println("¡Correo enviado con éxito!")
             true
         } catch (e: Exception) {
-            println("FALLO CRÍTICO SMTP (Puerto $smtpPort): ${e.message}")
-            e.printStackTrace()
+            println("FALLO CRÍTICO SMTP: ${e.message}")
             false
         }
     }

@@ -37,7 +37,7 @@ object DatabaseFactory {
             dbInstance = Database.connect(HikariDataSource(config))
 
             transaction(dbInstance) {
-                // DROP ELIMINADO DEFINITIVAMENTE para que los datos sean persistentes
+                // DROP ELIMINADO para asegurar la persistencia de datos entre reinicios
                 SchemaUtils.create(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
                 
                 // Asegura que se cree la columna 'horario' si no existe
