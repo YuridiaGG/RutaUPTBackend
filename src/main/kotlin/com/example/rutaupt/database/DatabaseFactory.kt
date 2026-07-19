@@ -37,14 +37,17 @@ object DatabaseFactory {
             dbInstance = Database.connect(HikariDataSource(config))
 
             transaction(dbInstance) {
-                // ESTA LÍNEA ES TEMPORAL: Borra la tabla vieja para que se cree con el nuevo formato
-                // Una vez que veas que las paradas funcionan, puedes borrar esta línea.
+                // Mantenemos el drop temporal de Paradas para asegurar el cambio de esquema
                 SchemaUtils.drop(Paradas) 
                 
                 SchemaUtils.create(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
+                
+                // ESTA LÍNEA ES NUEVA: Asegura que se cree la columna 'horario' en la tabla existente de Usuarios
+                SchemaUtils.createMissingTablesAndColumns(Usuarios)
+                
                 seedUser("admin@upt.com", "Admin", "Admin", "admin")
             }
-            logger.info("¡CONEXIÓN EXITOSA! Tabla paradas reseteada y lista.")
+            logger.info("¡CONEXIÓN EXITOSA! Esquema de base de datos actualizado.")
         } catch (e: Exception) {
             logger.error("FALLO DE CONEXIÓN: ${e.message}")
         }

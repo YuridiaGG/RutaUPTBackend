@@ -12,6 +12,7 @@ object Usuarios : Table("usuarios") {
     val edad = varchar("edad", 5).nullable()
     val telefono = varchar("telefono", 20).nullable()
     val numeroUnidad = varchar("numero_unidad", 20).nullable()
+    val horario = varchar("horario", 100).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

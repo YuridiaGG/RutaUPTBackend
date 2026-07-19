@@ -23,12 +23,28 @@ class AuthRepository {
                 it[Usuarios.edad] = user.edad
                 it[Usuarios.telefono] = user.telefono
                 it[Usuarios.numeroUnidad] = user.numeroUnidad
+                it[Usuarios.horario] = user.horario
             }
             true
         } catch (e: Exception) {
             println("Error al insertar usuario: ${e.message}")
             false
         }
+    }
+
+    suspend fun updateUser(user: User): Boolean = dbQuery {
+        val userId = user.id ?: return@dbQuery false
+        Usuarios.update({ Usuarios.id eq userId }) {
+            it[Usuarios.nombre] = user.nombre
+            it[Usuarios.apellidos] = user.apellidos
+            it[Usuarios.email] = user.email
+            if (user.password != null) it[Usuarios.password] = user.password
+            it[Usuarios.rol] = user.rol
+            it[Usuarios.edad] = user.edad
+            it[Usuarios.telefono] = user.telefono
+            it[Usuarios.numeroUnidad] = user.numeroUnidad
+            it[Usuarios.horario] = user.horario
+        } > 0
     }
 
     suspend fun getUserPassword(email: String): String? = dbQuery {
@@ -60,6 +76,7 @@ class AuthRepository {
         rol = row[Usuarios.rol],
         numeroUnidad = row[Usuarios.numeroUnidad],
         edad = row[Usuarios.edad],
-        telefono = row[Usuarios.telefono]
+        telefono = row[Usuarios.telefono],
+        horario = row[Usuarios.horario]
     )
 }

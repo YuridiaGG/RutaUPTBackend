@@ -73,7 +73,6 @@ fun Application.module() {
             val user = authRepository.findUserByEmail(request.email)
             val dbPass = authRepository.getUserPassword(request.email)
             if (user != null && dbPass == request.pass) {
-                // El objeto 'user' ya incluye la contraseña por el cambio en AuthRepository.rowToUser
                 call.respond(LoginResponse(true, "OK", user))
             } else {
                 call.respond(HttpStatusCode.Unauthorized, LoginResponse(false, "Credenciales incorrectas"))
@@ -95,6 +94,20 @@ fun Application.module() {
                 else call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error SMTP: Revisa variables en Railway"))
             } else {
                 call.respond(HttpStatusCode.NotFound, RegisterResponse(false, "Email no registrado"))
+            }
+        }
+
+        // --- GESTIÓN DE USUARIOS / HORARIOS ---
+        post("/api/auth/update") {
+            try {
+                val user = call.receive<User>()
+                if (authRepository.updateUser(user)) {
+                    call.respond(HttpStatusCode.OK, RegisterResponse(true, "Usuario actualizado correctamente"))
+                } else {
+                    call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "No se pudo actualizar el usuario (ID no encontrado)"))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error al actualizar: ${e.message}"))
             }
         }
 

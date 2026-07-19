@@ -12,7 +12,8 @@ data class User(
     val rol: String, // admin, chofer, estudiante
     val numeroUnidad: String? = null,
     val edad: String? = null,
-    val telefono: String? = null
+    val telefono: String? = null,
+    val horario: String? = null
 )
 
 @Serializable
