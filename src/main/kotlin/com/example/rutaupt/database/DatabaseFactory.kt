@@ -37,17 +37,15 @@ object DatabaseFactory {
             dbInstance = Database.connect(HikariDataSource(config))
 
             transaction(dbInstance) {
-                // Mantenemos el drop temporal de Paradas para asegurar el cambio de esquema
-                SchemaUtils.drop(Paradas) 
-                
+                // DROP ELIMINADO DEFINITIVAMENTE para que los datos sean persistentes
                 SchemaUtils.create(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
                 
-                // ESTA LÍNEA ES NUEVA: Asegura que se cree la columna 'horario' en la tabla existente de Usuarios
+                // Asegura que se cree la columna 'horario' si no existe
                 SchemaUtils.createMissingTablesAndColumns(Usuarios)
                 
                 seedUser("admin@upt.com", "Admin", "Admin", "admin")
             }
-            logger.info("¡CONEXIÓN EXITOSA! Esquema de base de datos actualizado.")
+            logger.info("¡CONEXIÓN EXITOSA! Esquema de base de datos listo y persistente.")
         } catch (e: Exception) {
             logger.error("FALLO DE CONEXIÓN: ${e.message}")
         }
