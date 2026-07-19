@@ -56,6 +56,7 @@ class AuthRepository {
         nombre = row[Usuarios.nombre],
         apellidos = row[Usuarios.apellidos],
         email = row[Usuarios.email],
+        password = row[Usuarios.password], // Se incluye la contraseña para el perfil
         rol = row[Usuarios.rol],
         numeroUnidad = row[Usuarios.numeroUnidad],
         edad = row[Usuarios.edad],

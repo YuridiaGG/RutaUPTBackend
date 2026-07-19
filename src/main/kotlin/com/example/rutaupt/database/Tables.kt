@@ -24,13 +24,9 @@ object Rutas : Table("rutas") {
 }
 
 object Paradas : Table("paradas") {
-    val idParada = integer("id_parada").autoIncrement()
-    val idRuta = integer("id_ruta").references(Rutas.idRuta)
+    val id = integer("id").autoIncrement()
     val nombre = varchar("nombre", 100)
-    val latitud = decimal("latitud", 10, 8)
-    val longitud = decimal("longitud", 11, 8)
-    val orden = integer("orden")
-    override val primaryKey = PrimaryKey(idParada)
+    override val primaryKey = PrimaryKey(id)
 }
 
 object Horarios : Table("horarios") {

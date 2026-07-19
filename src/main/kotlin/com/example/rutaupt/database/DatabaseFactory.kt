@@ -13,14 +13,12 @@ object DatabaseFactory {
     private var dbInstance: Database? = null
 
     fun init() {
-        // Railway inyecta estas variables automáticamente si el servicio MySQL está vinculado
-        val host = System.getenv("MYSQLHOST") ?: "mysql.railway.internal"
-        val port = System.getenv("MYSQLPORT") ?: "3306"
+        val host = System.getenv("MYSQLHOST") ?: "reseau.proxy.rlwy.net"
+        val port = System.getenv("MYSQLPORT") ?: "52875"
         val dbName = System.getenv("MYSQLDATABASE") ?: "railway"
         val user = System.getenv("MYSQLUSER") ?: "root"
         val password = System.getenv("MYSQLPASSWORD") ?: "xBovtCQtJMzdcfPcLFsHcMZCHLrfCifY"
 
-        // URL optimizada para la red interna de Railway
         val jdbcUrl = "jdbc:mysql://$host:$port/$dbName?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
         
         try {
@@ -29,21 +27,26 @@ object DatabaseFactory {
                 this.jdbcUrl = jdbcUrl
                 this.username = user
                 this.password = password
-                maximumPoolSize = 5
-                connectionTimeout = 30000
-                // Ayuda a detectar fugas de conexiones en el servidor
-                leakDetectionThreshold = 2000
+                maximumPoolSize = 3
+                connectionTimeout = 10000
+                isAutoCommit = false
+                transactionIsolation = "TRANSACTION_REPEATABLE_READ"
+                validate()
             }
 
             dbInstance = Database.connect(HikariDataSource(config))
 
             transaction(dbInstance) {
+                // ESTA LÍNEA ES TEMPORAL: Borra la tabla vieja para que se cree con el nuevo formato
+                // Una vez que veas que las paradas funcionan, puedes borrar esta línea.
+                SchemaUtils.drop(Paradas) 
+                
                 SchemaUtils.create(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
                 seedUser("admin@upt.com", "Admin", "Admin", "admin")
             }
-            logger.info("¡CONEXIÓN EXITOSA! Servidor conectado a la base de datos en Railway.")
+            logger.info("¡CONEXIÓN EXITOSA! Tabla paradas reseteada y lista.")
         } catch (e: Exception) {
-            logger.error("FALLO CRÍTICO DE BASE DE DATOS: ${e.message}")
+            logger.error("FALLO DE CONEXIÓN: ${e.message}")
         }
     }
 

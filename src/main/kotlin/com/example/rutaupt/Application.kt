@@ -2,6 +2,7 @@ package com.example.rutaupt
 
 import com.example.rutaupt.database.AuthRepository
 import com.example.rutaupt.database.DatabaseFactory
+import com.example.rutaupt.database.ParadasRepository
 import com.example.rutaupt.model.*
 import com.example.rutaupt.api.EmailService
 import io.ktor.http.*
@@ -17,6 +18,10 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.slf4j.LoggerFactory
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class ParadaRequest(val nombre: String)
 
 fun main() {
     embeddedServer(Netty, port = System.getenv("PORT")?.toInt() ?: 8080,
@@ -27,7 +32,7 @@ fun main() {
 fun Application.module() {
     val logger = LoggerFactory.getLogger("Application")
 
-    // CONFIGURACIÓN DE CORS: Permite que tu Frontend se conecte a este Backend
+    //conexion con el frontend
     install(CORS) {
         allowMethod(HttpMethod.Options)
         allowMethod(HttpMethod.Post)
@@ -37,7 +42,7 @@ fun Application.module() {
         allowHeader(HttpHeaders.Authorization)
         allowHeader(HttpHeaders.ContentType)
         allowHeader(HttpHeaders.AccessControlAllowOrigin)
-        anyHost() // Permite cualquier origen (Frontend) durante desarrollo
+        anyHost()
     }
 
     install(ContentNegotiation) {
@@ -57,16 +62,18 @@ fun Application.module() {
 
     DatabaseFactory.init()
     val authRepository = AuthRepository()
+    val paradasRepository = ParadasRepository()
 
     routing {
         get("/") { call.respondText("Servidor RutaUPT Online") }
 
-        // --- RUTAS DE AUTH ---
+        // Autenticación
         post("/api/auth/login") {
             val request = call.receive<LoginRequest>()
             val user = authRepository.findUserByEmail(request.email)
             val dbPass = authRepository.getUserPassword(request.email)
             if (user != null && dbPass == request.pass) {
+                // El objeto 'user' ya incluye la contraseña por el cambio en AuthRepository.rowToUser
                 call.respond(LoginResponse(true, "OK", user))
             } else {
                 call.respond(HttpStatusCode.Unauthorized, LoginResponse(false, "Credenciales incorrectas"))
@@ -91,7 +98,31 @@ fun Application.module() {
             }
         }
 
-        // --- RUTAS DE ADMIN (Corrigiendo el 404) ---
+        // --- RUTAS DE PARADAS ---
+        get("/api/paradas") {
+            val paradas = paradasRepository.getAllParadas()
+            call.respond(paradas)
+        }
+
+        post("/api/paradas") {
+            val request = call.receive<ParadaRequest>()
+            if (paradasRepository.addParada(request.nombre)) {
+                call.respond(HttpStatusCode.Created, mapOf("success" to true))
+            } else {
+                call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
+            }
+        }
+
+        delete("/api/paradas/{nombre}") {
+            val nombre = call.parameters["nombre"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            if (paradasRepository.deleteParadaByName(nombre)) {
+                call.respond(HttpStatusCode.OK, mapOf("success" to true))
+            } else {
+                call.respond(HttpStatusCode.NotFound, mapOf("success" to false))
+            }
+        }
+
+        // --- RUTAS DE ADMIN ---
         get("/api/admin/stats") {
             try {
                 val estudiantes = authRepository.getAllUsersByRol("estudiante").size
