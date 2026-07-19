@@ -87,13 +87,24 @@ fun Application.module() {
 
         post("/api/auth/recover") {
             val request = call.receive<RecoveryRequest>()
+            logger.info("Recuperación solicitada para: ${request.email}")
+            
             val user = authRepository.findUserByEmail(request.email)
             if (user != null) {
                 val pass = user.password ?: ""
+                logger.info("Usuario encontrado: ${user.nombre}. Enviando email...")
+                
                 val sent = EmailService.sendPasswordRecoveryEmail(user.nombre, user.email, pass)
-                if (sent) call.respond(RegisterResponse(true, "Correo enviado correctamente"))
-                else call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error SMTP: Revisa variables en Railway"))
+                
+                if (sent) {
+                    logger.info("Correo enviado exitosamente a ${user.email}")
+                    call.respond(RegisterResponse(true, "Correo enviado correctamente"))
+                } else {
+                    logger.error("Error al enviar email a ${user.email}")
+                    call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error SMTP: Revisa variables en Railway"))
+                }
             } else {
+                logger.warn("Intento de recuperación con email no registrado: ${request.email}")
                 call.respond(HttpStatusCode.NotFound, RegisterResponse(false, "Email no registrado"))
             }
         }
