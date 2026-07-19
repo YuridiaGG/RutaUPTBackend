@@ -37,15 +37,18 @@ object DatabaseFactory {
             dbInstance = Database.connect(HikariDataSource(config))
 
             transaction(dbInstance) {
-                // DROP ELIMINADO para asegurar la persistencia de datos entre reinicios
+                // FORZAR REINICIO: Borra las tablas para que se creen con el formato correcto en Railway.
+                // IMPORTANTE: ELIMINA estas líneas en cuanto confirmes que ya se guardan paradas y reportes.
+                SchemaUtils.drop(Paradas, Reportes) 
+                
                 SchemaUtils.create(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
                 
-                // Asegura que se cree la columna 'horario' si no existe
+                // Asegura que se cree la columna 'horario' en la tabla existente de Usuarios si no existe
                 SchemaUtils.createMissingTablesAndColumns(Usuarios)
                 
                 seedUser("admin@upt.com", "Admin", "Admin", "admin")
             }
-            logger.info("¡CONEXIÓN EXITOSA! Esquema de base de datos listo y persistente.")
+            logger.info("¡CONEXIÓN EXITOSA! Tablas de paradas y reportes reseteadas.")
         } catch (e: Exception) {
             logger.error("FALLO DE CONEXIÓN: ${e.message}")
         }

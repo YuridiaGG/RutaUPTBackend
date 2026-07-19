@@ -1,8 +1,6 @@
 package com.example.rutaupt
 
-import com.example.rutaupt.database.AuthRepository
-import com.example.rutaupt.database.DatabaseFactory
-import com.example.rutaupt.database.ParadasRepository
+import com.example.rutaupt.database.*
 import com.example.rutaupt.model.*
 import com.example.rutaupt.api.EmailService
 import io.ktor.http.*
@@ -32,7 +30,6 @@ fun main() {
 fun Application.module() {
     val logger = LoggerFactory.getLogger("Application")
 
-    //conexion con el frontend
     install(CORS) {
         allowMethod(HttpMethod.Options)
         allowMethod(HttpMethod.Post)
@@ -63,11 +60,12 @@ fun Application.module() {
     DatabaseFactory.init()
     val authRepository = AuthRepository()
     val paradasRepository = ParadasRepository()
+    val reportesRepository = ReportesRepository()
 
     routing {
         get("/") { call.respondText("Servidor RutaUPT Online") }
 
-        // Autenticación
+        // --- AUTH ---
         post("/api/auth/login") {
             val request = call.receive<LoginRequest>()
             val user = authRepository.findUserByEmail(request.email)
@@ -87,76 +85,71 @@ fun Application.module() {
 
         post("/api/auth/recover") {
             val request = call.receive<RecoveryRequest>()
-            logger.info("Recuperación solicitada para: ${request.email}")
-            
             val user = authRepository.findUserByEmail(request.email)
             if (user != null) {
                 val pass = user.password ?: ""
-                logger.info("Usuario encontrado: ${user.nombre}. Enviando email...")
-                
                 val sent = EmailService.sendPasswordRecoveryEmail(user.nombre, user.email, pass)
-                
-                if (sent) {
-                    logger.info("Correo enviado exitosamente a ${user.email}")
-                    call.respond(RegisterResponse(true, "Correo enviado correctamente"))
-                } else {
-                    logger.error("Error al enviar email a ${user.email}")
-                    call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error SMTP: Revisa variables en Railway"))
-                }
+                if (sent) call.respond(RegisterResponse(true, "Correo enviado correctamente"))
+                else call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error SMTP"))
             } else {
-                logger.warn("Intento de recuperación con email no registrado: ${request.email}")
                 call.respond(HttpStatusCode.NotFound, RegisterResponse(false, "Email no registrado"))
             }
         }
 
-        // --- GESTIÓN DE USUARIOS / HORARIOS ---
         post("/api/auth/update") {
             try {
                 val user = call.receive<User>()
                 if (authRepository.updateUser(user)) {
-                    call.respond(HttpStatusCode.OK, RegisterResponse(true, "Usuario actualizado correctamente"))
+                    call.respond(HttpStatusCode.OK, RegisterResponse(true, "Usuario actualizado"))
                 } else {
-                    call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "No se pudo actualizar el usuario (ID no encontrado)"))
+                    call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "No se encontró el ID"))
                 }
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error al actualizar: ${e.message}"))
+                call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error: ${e.message}"))
             }
         }
 
-        // --- RUTAS DE PARADAS ---
+        // --- PARADAS ---
         get("/api/paradas") {
-            val paradas = paradasRepository.getAllParadas()
-            call.respond(paradas)
+            call.respond(paradasRepository.getAllParadas())
         }
 
         post("/api/paradas") {
             val request = call.receive<ParadaRequest>()
-            if (paradasRepository.addParada(request.nombre)) {
-                call.respond(HttpStatusCode.Created, mapOf("success" to true))
-            } else {
-                call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
-            }
+            if (paradasRepository.addParada(request.nombre)) call.respond(HttpStatusCode.Created, mapOf("success" to true))
+            else call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
         }
 
         delete("/api/paradas/{nombre}") {
             val nombre = call.parameters["nombre"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
-            if (paradasRepository.deleteParadaByName(nombre)) {
-                call.respond(HttpStatusCode.OK, mapOf("success" to true))
-            } else {
-                call.respond(HttpStatusCode.NotFound, mapOf("success" to false))
+            if (paradasRepository.deleteParadaByName(nombre)) call.respond(HttpStatusCode.OK, mapOf("success" to true))
+            else call.respond(HttpStatusCode.NotFound, mapOf("success" to false))
+        }
+
+        // --- REPORTES ---
+        get("/api/reportes") {
+            call.respond(reportesRepository.getAllReportes())
+        }
+
+        post("/api/reportes") {
+            try {
+                val reporte = call.receive<ReporteUnidad>()
+                if (reportesRepository.addReporte(reporte)) {
+                    call.respond(HttpStatusCode.Created, mapOf("success" to true))
+                } else {
+                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false, "message" to "Error al guardar en DB"))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
             }
         }
 
-        // --- RUTAS DE ADMIN ---
+        // --- ADMIN ---
         get("/api/admin/stats") {
             try {
-                val estudiantes = authRepository.getAllUsersByRol("estudiante").size
-                val choferes = authRepository.getAllUsersByRol("chofer").size
-                call.respond(mapOf(
-                    "estudiantes" to estudiantes,
-                    "choferes" to choferes,
-                    "rutas" to 0
-                ))
+                val est = authRepository.getAllUsersByRol("estudiante").size
+                val cho = authRepository.getAllUsersByRol("chofer").size
+                call.respond(mapOf("estudiantes" to est, "choferes" to cho, "rutas" to 0))
             } catch (e: Exception) {
                 call.respond(mapOf("estudiantes" to 0, "choferes" to 0, "rutas" to 0))
             }
@@ -164,8 +157,7 @@ fun Application.module() {
 
         get("/api/admin/users/{rol}") {
             val rol = call.parameters["rol"] ?: "chofer"
-            val users = authRepository.getAllUsersByRol(rol)
-            call.respond(users)
+            call.respond(authRepository.getAllUsersByRol(rol))
         }
 
         delete("/api/admin/users/{id}") {
