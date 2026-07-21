@@ -61,6 +61,7 @@ fun Application.module() {
     val authRepository = AuthRepository()
     val paradasRepository = ParadasRepository()
     val reportesRepository = ReportesRepository()
+    val rutasRepository = RutasRepository()
 
     routing {
         get("/") { call.respondText("Servidor RutaUPT Online") }
@@ -109,6 +110,24 @@ fun Application.module() {
             }
         }
 
+        // --- RUTAS ---
+        get("/api/rutas") {
+            call.respond(rutasRepository.getAllRutas())
+        }
+
+        post("/api/rutas") {
+            try {
+                val request = call.receive<RutaModel>()
+                if (rutasRepository.addRuta(request.nombre, request.color)) {
+                    call.respond(HttpStatusCode.Created, mapOf("success" to true))
+                } else {
+                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
+            }
+        }
+
         // --- PARADAS ---
         get("/api/paradas") {
             call.respond(paradasRepository.getAllParadas())
@@ -149,7 +168,8 @@ fun Application.module() {
             try {
                 val est = authRepository.getAllUsersByRol("estudiante").size
                 val cho = authRepository.getAllUsersByRol("chofer").size
-                call.respond(mapOf("estudiantes" to est, "choferes" to cho, "rutas" to 0))
+                val rut = rutasRepository.getRutasCount()
+                call.respond(mapOf("estudiantes" to est, "choferes" to cho, "rutas" to rut))
             } catch (e: Exception) {
                 call.respond(mapOf("estudiantes" to 0, "choferes" to 0, "rutas" to 0))
             }
