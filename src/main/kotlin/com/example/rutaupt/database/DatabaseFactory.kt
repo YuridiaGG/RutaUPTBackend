@@ -13,6 +13,7 @@ object DatabaseFactory {
     private var dbInstance: Database? = null
 
     fun init() {
+        // Se intenta leer de variables de entorno, si no existen se usan los valores de Railway por defecto
         val host = System.getenv("MYSQLHOST") ?: "reseau.proxy.rlwy.net"
         val port = System.getenv("MYSQLPORT") ?: "52875"
         val dbName = System.getenv("MYSQLDATABASE") ?: "railway"
@@ -37,18 +38,15 @@ object DatabaseFactory {
             dbInstance = Database.connect(HikariDataSource(config))
 
             transaction(dbInstance) {
-                // FORZAR REINICIO: Borra las tablas para que se creen con el formato correcto en Railway.
-                // IMPORTANTE: ELIMINA estas líneas en cuanto confirmes que ya se guardan paradas y reportes.
-                SchemaUtils.drop(Paradas, Reportes) 
-                
+                // He eliminado SchemaUtils.drop para que los datos NO se borren al reiniciar
                 SchemaUtils.create(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
                 
-                // Asegura que se cree la columna 'horario' en la tabla existente de Usuarios si no existe
-                SchemaUtils.createMissingTablesAndColumns(Usuarios)
+                // Actualiza la estructura de las tablas si agregas columnas nuevas sin borrar los datos existentes
+                SchemaUtils.createMissingTablesAndColumns(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
                 
                 seedUser("admin@upt.com", "Admin", "Admin", "admin")
             }
-            logger.info("¡CONEXIÓN EXITOSA! Tablas de paradas y reportes reseteadas.")
+            logger.info("¡CONEXIÓN EXITOSA! Los reportes y paradas ahora son persistentes.")
         } catch (e: Exception) {
             logger.error("FALLO DE CONEXIÓN: ${e.message}")
         }
