@@ -54,18 +54,28 @@ object EmailService {
                 setBody(BrevoEmailRequest(
                     sender = BrevoSender("RutaUPT Soporte", senderEmail),
                     to = listOf(BrevoTo(to, name)),
-                    subject = "Recuperación de credenciales – RutaUPT",
+                    subject = "Recuperación de contraseña - RutaUPT",
                     htmlContent = """
-                        <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.6;">
-                            <h2 style="color: #007bff;">Hola $name,</h2>
-                            <p>Has solicitado tus credenciales de acceso para <strong>RutaUPT</strong>:</p>
-                            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6; margin: 20px 0;">
-                                <p style="margin: 5px 0;"><strong>Email:</strong> $to</p>
-                                <p style="margin: 5px 0;"><strong>Contraseña:</strong> $password</p>
+                        <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px; line-height: 1.6;">
+                            <h3 style="color: #004a99; border-bottom: 2px solid #004a99; padding-bottom: 10px;">RutaUPT - Soporte</h3>
+                            <p>Estimado(a) <strong>$name</strong>:</p>
+                            <p>Atendiendo tu solicitud de recuperación de contraseña, te proporcionamos la información de acceso a tu cuenta.</p>
+                            
+                            <div style="background-color: #f2f7ff; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0; border: 1px dashed #004a99;">
+                                <span style="font-size: 18px; color: #004a99;">Contraseña: <strong>$password</strong></span>
                             </div>
-                            <p>Si no solicitaste este cambio, puedes ignorar este mensaje.</p>
-                            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-                            <p style="font-size: 12px; color: #666;">Saludos,<br>Equipo RutaUPT</p>
+
+                            <p>Por tu seguridad, te recomendamos iniciar sesión lo antes posible y actualizar esta contraseña desde la sección <strong>"Perfil"</strong>, creando una nueva que solo tú conozcas.</p>
+                            
+                            <p style="font-size: 13px; color: #666;">Si no solicitaste esta recuperación, comunícate con el administrador del sistema para proteger tu cuenta.</p>
+                            
+                            <p>Gracias por utilizar RutaUPT.</p>
+                            
+                            <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px; font-size: 12px; color: #888;">
+                                <p style="margin: 0;">Atentamente,</p>
+                                <p style="margin: 0; font-weight: bold;">Equipo de Soporte RutaUPT</p>
+                                <p style="margin: 0;">Universidad Politécnica de Tulancingo</p>
+                            </div>
                         </div>
                     """.trimIndent()
                 ))
