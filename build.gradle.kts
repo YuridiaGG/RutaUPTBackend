@@ -48,6 +48,12 @@ dependencies {
     implementation(libs.ktor.server.content.negotiation) 
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.serialization.kotlinx.json)
+    
+    // Ktor Client para llamar a APIs externas (como Resend)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.content.negotiation)
+
     implementation(libs.exposed.core)
     implementation(libs.exposed.dao)
     implementation(libs.exposed.jdbc)
