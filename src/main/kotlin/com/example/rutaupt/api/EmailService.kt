@@ -13,11 +13,17 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 @Serializable
-data class ResendEmailRequest(
-    val from: String,
-    val to: List<String>,
+data class BrevoSender(val name: String, val email: String)
+
+@Serializable
+data class BrevoTo(val email: String, val name: String? = null)
+
+@Serializable
+data class BrevoEmailRequest(
+    val sender: BrevoSender,
+    val to: List<BrevoTo>,
     val subject: String,
-    val html: String
+    val htmlContent: String
 )
 
 object EmailService {
@@ -31,34 +37,33 @@ object EmailService {
     }
 
     suspend fun sendPasswordRecoveryEmail(name: String, to: String, password: String): Boolean = withContext(Dispatchers.IO) {
-        val apiKey = System.getenv("RESEND_API_KEY")?.trim() ?: ""
-        // Por defecto usamos el email de prueba de Resend si no hay uno configurado
-        val fromEmail = System.getenv("FROM_EMAIL")?.trim() ?: "onboarding@resend.dev"
+        val apiKey = System.getenv("BREVO_API_KEY")?.trim() ?: ""
+        val senderEmail = System.getenv("SENDER_EMAIL")?.trim() ?: ""
 
-        if (apiKey.isEmpty()) {
-            println("ERROR: Falta la variable RESEND_API_KEY en Railway.")
+        if (apiKey.isEmpty() || senderEmail.isEmpty()) {
+            println("ERROR: Faltan variables BREVO_API_KEY o SENDER_EMAIL en Railway.")
             return@withContext false
         }
 
         try {
-            println("Iniciando envío vía API de Resend para: $to")
+            println("Iniciando envío universal vía Brevo para: $to")
             
-            val response: HttpResponse = client.post("https://api.resend.com/emails") {
-                header(HttpHeaders.Authorization, "Bearer $apiKey")
+            val response: HttpResponse = client.post("https://api.brevo.com/v3/smtp/email") {
+                header("api-key", apiKey)
                 contentType(ContentType.Application.Json)
-                setBody(ResendEmailRequest(
-                    from = fromEmail,
-                    to = listOf(to),
+                setBody(BrevoEmailRequest(
+                    sender = BrevoSender("RutaUPT Soporte", senderEmail),
+                    to = listOf(BrevoTo(to, name)),
                     subject = "Recuperación de credenciales – RutaUPT",
-                    html = """
-                        <div style="font-family: sans-serif; color: #333; padding: 20px; line-height: 1.5;">
+                    htmlContent = """
+                        <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.6;">
                             <h2 style="color: #007bff;">Hola $name,</h2>
                             <p>Has solicitado tus credenciales de acceso para <strong>RutaUPT</strong>:</p>
-                            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6; margin: 20px 0;">
+                            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6; margin: 20px 0;">
                                 <p style="margin: 5px 0;"><strong>Email:</strong> $to</p>
                                 <p style="margin: 5px 0;"><strong>Contraseña:</strong> $password</p>
                             </div>
-                            <p>Si no solicitaste este correo, puedes ignorarlo con seguridad.</p>
+                            <p>Si no solicitaste este cambio, puedes ignorar este mensaje.</p>
                             <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
                             <p style="font-size: 12px; color: #666;">Saludos,<br>Equipo RutaUPT</p>
                         </div>
@@ -67,15 +72,15 @@ object EmailService {
             }
 
             if (response.status.isSuccess()) {
-                println("¡ÉXITO: Correo enviado correctamente vía API de Resend!")
+                println("¡ÉXITO: Correo universal enviado correctamente vía Brevo!")
                 true
             } else {
                 val errorBody = response.bodyAsText()
-                println("Error de API Resend (${response.status}): $errorBody")
+                println("Error de API Brevo (${response.status}): $errorBody")
                 false
             }
         } catch (e: Exception) {
-            println("FALLO CRÍTICO EN API RESEND: ${e.message}")
+            println("FALLO CRÍTICO EN API BREVO: ${e.message}")
             e.printStackTrace()
             false
         }
