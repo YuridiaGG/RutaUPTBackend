@@ -36,63 +36,51 @@ object EmailService {
         }
     }
 
-    suspend fun sendPasswordRecoveryEmail(name: String, to: String, password: String): Boolean = withContext(Dispatchers.IO) {
+    private suspend fun sendEmail(name: String, to: String, subject: String, html: String): Boolean = withContext(Dispatchers.IO) {
         val apiKey = System.getenv("BREVO_API_KEY")?.trim() ?: ""
         val senderEmail = System.getenv("SENDER_EMAIL")?.trim() ?: ""
 
         if (apiKey.isEmpty() || senderEmail.isEmpty()) {
-            println("ERROR: Faltan variables BREVO_API_KEY o SENDER_EMAIL en Railway.")
+            println("ERROR: Faltan variables BREVO_API_KEY o SENDER_EMAIL.")
             return@withContext false
         }
 
         try {
-            println("Iniciando envío universal vía Brevo para: $to")
-            
             val response: HttpResponse = client.post("https://api.brevo.com/v3/smtp/email") {
                 header("api-key", apiKey)
                 contentType(ContentType.Application.Json)
                 setBody(BrevoEmailRequest(
                     sender = BrevoSender("RutaUPT Soporte", senderEmail),
                     to = listOf(BrevoTo(to, name)),
-                    subject = "Recuperación de contraseña - RutaUPT",
-                    htmlContent = """
-                        <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px; line-height: 1.6;">
-                            <h3 style="color: #004a99; border-bottom: 2px solid #004a99; padding-bottom: 10px;">RutaUPT - Soporte</h3>
-                            <p>Estimado(a) <strong>$name</strong>:</p>
-                            <p>Atendiendo tu solicitud de recuperación de contraseña, te proporcionamos la información de acceso a tu cuenta.</p>
-                            
-                            <div style="background-color: #f2f7ff; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0; border: 1px dashed #004a99;">
-                                <span style="font-size: 18px; color: #004a99;">Contraseña: <strong>$password</strong></span>
-                            </div>
-
-                            <p>Por tu seguridad, te recomendamos iniciar sesión lo antes posible y actualizar esta contraseña desde la sección <strong>"Perfil"</strong>, creando una nueva que solo tú conozcas.</p>
-                            
-                            <p style="font-size: 13px; color: #666;">Si no solicitaste esta recuperación, comunícate con el administrador del sistema para proteger tu cuenta.</p>
-                            
-                            <p>Gracias por utilizar RutaUPT.</p>
-                            
-                            <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px; font-size: 12px; color: #888;">
-                                <p style="margin: 0;">Atentamente,</p>
-                                <p style="margin: 0; font-weight: bold;">Equipo de Soporte RutaUPT</p>
-                                <p style="margin: 0;">Universidad Politécnica de Tulancingo</p>
-                            </div>
-                        </div>
-                    """.trimIndent()
+                    subject = subject,
+                    htmlContent = html
                 ))
             }
-
-            if (response.status.isSuccess()) {
-                println("¡ÉXITO: Correo universal enviado correctamente vía Brevo!")
-                true
-            } else {
-                val errorBody = response.bodyAsText()
-                println("Error de API Brevo (${response.status}): $errorBody")
-                false
-            }
+            response.status.isSuccess()
         } catch (e: Exception) {
-            println("FALLO CRÍTICO EN API BREVO: ${e.message}")
-            e.printStackTrace()
+            println("Error enviando email: ${e.message}")
             false
         }
+    }
+
+    suspend fun sendPasswordRecoveryEmail(name: String, to: String, password: String): Boolean {
+        val html = """
+            <div style="font-family: sans-serif; padding: 20px;">
+                <h2>Recuperación de Contraseña</h2>
+                <p>Hola $name, tu contraseña es: <strong>$password</strong></p>
+                <p>Cámbiala pronto desde tu perfil.</p>
+            </div>
+        """.trimIndent()
+        return sendEmail(name, to, "Recuperación de contraseña - RutaUPT", html)
+    }
+
+    suspend fun sendWelcomeEmail(name: String, to: String, rol: String): Boolean {
+        val html = """
+            <div style="font-family: sans-serif; padding: 20px;">
+                <h2>¡Bienvenido a RutaUPT!</h2>
+                <p>Hola $name, tu cuenta como <strong>$rol</strong> ha sido creada.</p>
+            </div>
+        """.trimIndent()
+        return sendEmail(name, to, "Bienvenido a RutaUPT", html)
     }
 }

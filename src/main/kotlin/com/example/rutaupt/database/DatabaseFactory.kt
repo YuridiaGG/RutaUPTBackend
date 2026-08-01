@@ -13,14 +13,15 @@ object DatabaseFactory {
     private var dbInstance: Database? = null
 
     fun init() {
-        // Se intenta leer de variables de entorno, si no existen se usan los valores de Railway por defecto
-        val host = System.getenv("MYSQLHOST") ?: "reseau.proxy.rlwy.net"
-        val port = System.getenv("MYSQLPORT") ?: "52875"
+        // Priorizamos variables de entorno para producción (Railway)
+        // Pero usamos localhost como respaldo para desarrollo local, igual que tenías en la raíz
+        val host = System.getenv("MYSQLHOST") ?: "localhost"
+        val port = System.getenv("MYSQLPORT") ?: "3306"
         val dbName = System.getenv("MYSQLDATABASE") ?: "railway"
         val user = System.getenv("MYSQLUSER") ?: "root"
-        val password = System.getenv("MYSQLPASSWORD") ?: "xBovtCQtJMzdcfPcLFsHcMZCHLrfCifY"
+        val password = System.getenv("MYSQLPASSWORD") ?: ""
 
-        val jdbcUrl = "jdbc:mysql://$host:$port/$dbName?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+        val jdbcUrl = "jdbc:mysql://$host:$port/$dbName?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8"
         
         try {
             val config = HikariConfig().apply {
@@ -28,8 +29,9 @@ object DatabaseFactory {
                 this.jdbcUrl = jdbcUrl
                 this.username = user
                 this.password = password
-                maximumPoolSize = 3
-                connectionTimeout = 10000
+                maximumPoolSize = 5
+                minimumIdle = 1
+                connectionTimeout = 30000
                 isAutoCommit = false
                 transactionIsolation = "TRANSACTION_REPEATABLE_READ"
                 validate()
@@ -38,17 +40,17 @@ object DatabaseFactory {
             dbInstance = Database.connect(HikariDataSource(config))
 
             transaction(dbInstance) {
-                // He eliminado SchemaUtils.drop para que los datos NO se borren al reiniciar
+                // Creamos las tablas si no existen
                 SchemaUtils.create(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
                 
-                // Actualiza la estructura de las tablas si agregas columnas nuevas sin borrar los datos existentes
+                // Sincronizamos columnas nuevas sin borrar datos
                 SchemaUtils.createMissingTablesAndColumns(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
                 
                 seedUser("admin@upt.com", "Admin", "Admin", "admin")
             }
-            logger.info("¡CONEXIÓN EXITOSA! Los reportes y paradas ahora son persistentes.")
+            logger.info("Base de datos conectada correctamente (Host: $host)")
         } catch (e: Exception) {
-            logger.error("FALLO DE CONEXIÓN: ${e.message}")
+            logger.error("ERROR DE CONEXIÓN A BASE DE DATOS: ${e.message}")
         }
     }
 

@@ -19,7 +19,7 @@ class AuthRepository {
                 it[Usuarios.apellidos] = user.apellidos
                 it[Usuarios.email] = user.email
                 it[Usuarios.password] = user.password ?: ""
-                it[Usuarios.rol] = user.rol
+                it[Usuarios.rol] = user.rol.lowercase() // Normalizamos a minúsculas
                 it[Usuarios.edad] = user.edad
                 it[Usuarios.telefono] = user.telefono
                 it[Usuarios.numeroUnidad] = user.numeroUnidad
@@ -39,7 +39,7 @@ class AuthRepository {
             it[Usuarios.apellidos] = user.apellidos
             it[Usuarios.email] = user.email
             if (user.password != null) it[Usuarios.password] = user.password
-            it[Usuarios.rol] = user.rol
+            it[Usuarios.rol] = user.rol.lowercase()
             it[Usuarios.edad] = user.edad
             it[Usuarios.telefono] = user.telefono
             it[Usuarios.numeroUnidad] = user.numeroUnidad
@@ -53,9 +53,15 @@ class AuthRepository {
             .singleOrNull()
     }
 
-    // NUEVAS FUNCIONES PARA EL ADMIN
+    // NUEVAS FUNCIONES PARA EL ADMIN - Ahora insensibles a mayúsculas
     suspend fun getAllUsersByRol(rol: String): List<User> = dbQuery {
-        Usuarios.selectAll().where { Usuarios.rol eq rol }
+        // Buscamos el rol exacto o su variante (alumno/estudiante)
+        val targetRoles = when (rol.lowercase()) {
+            "estudiante", "alumno" -> listOf("estudiante", "alumno")
+            else -> listOf(rol.lowercase())
+        }
+        
+        Usuarios.selectAll().where { Usuarios.rol.lowerCase() inList targetRoles }
             .map { rowToUser(it) }
     }
 
@@ -72,7 +78,7 @@ class AuthRepository {
         nombre = row[Usuarios.nombre],
         apellidos = row[Usuarios.apellidos],
         email = row[Usuarios.email],
-        password = row[Usuarios.password], // Se incluye la contraseña para el perfil
+        password = row[Usuarios.password],
         rol = row[Usuarios.rol],
         numeroUnidad = row[Usuarios.numeroUnidad],
         edad = row[Usuarios.edad],
