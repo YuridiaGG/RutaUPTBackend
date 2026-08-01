@@ -12,6 +12,7 @@ object Usuarios : Table("usuarios") {
     val edad = varchar("edad", 5).nullable()
     val telefono = varchar("telefono", 20).nullable()
     val numeroUnidad = varchar("numero_unidad", 20).nullable()
+    val horario = varchar("horario", 100).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -24,20 +25,20 @@ object Rutas : Table("rutas") {
 }
 
 object Paradas : Table("paradas") {
-    val idParada = integer("id_parada").autoIncrement()
-    val idRuta = integer("id_ruta").references(Rutas.idRuta)
+    val id = integer("id").autoIncrement()
     val nombre = varchar("nombre", 100)
-    val latitud = decimal("latitud", 10, 8)
-    val longitud = decimal("longitud", 11, 8)
-    val orden = integer("orden")
-    override val primaryKey = PrimaryKey(idParada)
+    // Guarda el link de Google Maps ya resuelto (URL larga con las coordenadas).
+    // text() en vez de varchar porque un link expandido de Google Maps puede
+    // ser bastante largo y no queremos truncarlo.
+    val ubicacion = text("ubicacion").nullable()
+    override val primaryKey = PrimaryKey(id)
 }
 
 object Horarios : Table("horarios") {
     val idHorario = integer("id_horario").autoIncrement()
     val idRuta = integer("id_ruta").references(Rutas.idRuta)
     val idUsuarioChofer = integer("id_usuario_chofer").references(Usuarios.id)
-    val horaSalida = varchar("hora_salida", 8) 
+    val horaSalida = varchar("hora_salida", 8)
     val dias = varchar("dias", 50)
     override val primaryKey = PrimaryKey(idHorario)
 }
@@ -46,9 +47,9 @@ object Reportes : Table("reportes") {
     val id = long("id").autoIncrement()
     val unidad = varchar("unidad", 20)
     val mensaje = text("mensaje")
-    val fechaHora = varchar("fecha_hora", 30) 
+    val fechaHora = varchar("fecha_hora", 30)
     val tipo = varchar("tipo", 20) // 'ALERTA' o 'INFORMACION'
-    val imagen = text("imagen").nullable() 
+    val imagen = text("imagen").nullable()
     val estado = varchar("estado", 50).nullable()
     val validacionAdmin = varchar("validacion_admin", 20).nullable()
     override val primaryKey = PrimaryKey(id)
