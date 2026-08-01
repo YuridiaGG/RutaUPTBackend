@@ -5,12 +5,12 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class ReporteTipo {
-    ALERTA, INFORMACION
+    ALERTA, INFORMACION, RETRASO
 }
 
 @Serializable
 data class ReporteUnidad(
-    val id: Long = Clock.System.now().toEpochMilliseconds(),
+    val id: Long? = null,
     val unidad: String,
     val mensaje: String,
     val tiempo: String,

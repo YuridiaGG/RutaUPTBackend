@@ -8,7 +8,7 @@ object Usuarios : Table("usuarios") {
     val apellidos = varchar("apellidos", 100)
     val email = varchar("email", 100).uniqueIndex()
     val password = varchar("password", 255)
-    val rol = varchar("rol", 20) // 'admin', 'estudiante', 'chofer'
+    val rol = varchar("rol", 20)
     val edad = varchar("edad", 5).nullable()
     val telefono = varchar("telefono", 20).nullable()
     val numeroUnidad = varchar("numero_unidad", 20).nullable()
@@ -27,9 +27,6 @@ object Rutas : Table("rutas") {
 object Paradas : Table("paradas") {
     val id = integer("id").autoIncrement()
     val nombre = varchar("nombre", 100)
-    // Guarda el link de Google Maps ya resuelto (URL larga con las coordenadas).
-    // text() en vez de varchar porque un link expandido de Google Maps puede
-    // ser bastante largo y no queremos truncarlo.
     val ubicacion = text("ubicacion").nullable()
     override val primaryKey = PrimaryKey(id)
 }
@@ -47,11 +44,11 @@ object Reportes : Table("reportes") {
     val id = long("id").autoIncrement()
     val unidad = varchar("unidad", 20)
     val mensaje = text("mensaje")
-    val fechaHora = varchar("fecha_hora", 30)
-    val tipo = varchar("tipo", 20) // 'ALERTA' o 'INFORMACION'
+    val fechaHora = varchar("fecha_hora", 50) 
+    val tipo = varchar("tipo", 50) 
     val imagen = text("imagen").nullable()
     val estado = varchar("estado", 50).nullable()
-    val validacionAdmin = varchar("validacion_admin", 20).nullable()
+    val validacionAdmin = text("validacion_admin").nullable() // Aumentado a TEXT
     override val primaryKey = PrimaryKey(id)
 }
 

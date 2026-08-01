@@ -8,7 +8,7 @@ object Usuarios : Table("usuarios") {
     val apellidos = varchar("apellidos", 100)
     val email = varchar("email", 100).uniqueIndex()
     val password = varchar("password", 255)
-    val rol = varchar("rol", 20) // 'admin', 'estudiante', 'chofer'
+    val rol = varchar("rol", 20)
     val edad = varchar("edad", 5).nullable()
     val telefono = varchar("telefono", 20).nullable()
     val numeroUnidad = varchar("numero_unidad", 20).nullable()
@@ -35,7 +35,7 @@ object Horarios : Table("horarios") {
     val idHorario = integer("id_horario").autoIncrement()
     val idRuta = integer("id_ruta").references(Rutas.idRuta)
     val idUsuarioChofer = integer("id_usuario_chofer").references(Usuarios.id)
-    val horaSalida = varchar("hora_salida", 8) 
+    val horaSalida = varchar("hora_salida", 8)
     val dias = varchar("dias", 50)
     override val primaryKey = PrimaryKey(idHorario)
 }
@@ -44,11 +44,11 @@ object Reportes : Table("reportes") {
     val id = long("id").autoIncrement()
     val unidad = varchar("unidad", 20)
     val mensaje = text("mensaje")
-    val fechaHora = varchar("fecha_hora", 30) 
-    val tipo = varchar("tipo", 20) // 'ALERTA' o 'INFORMACION'
-    val imagen = text("imagen").nullable() 
+    val fechaHora = varchar("fecha_hora", 50) 
+    val tipo = varchar("tipo", 50) 
+    val imagen = text("imagen").nullable()
     val estado = varchar("estado", 50).nullable()
-    val validacionAdmin = varchar("validacion_admin", 20).nullable()
+    val validacionAdmin = text("validacion_admin").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

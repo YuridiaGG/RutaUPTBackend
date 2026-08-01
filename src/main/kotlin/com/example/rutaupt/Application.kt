@@ -21,6 +21,9 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ParadaRequest(val nombre: String, val ubicacion: String? = null)
 
+@Serializable
+data class ReporteStatusRequest(val estado: String, val validacionAdmin: String? = null)
+
 fun main() {
     embeddedServer(Netty, port = System.getenv("PORT")?.toInt() ?: 8080,
         host = "0.0.0.0", module = Application::module)
@@ -174,6 +177,37 @@ fun Application.module() {
                 }
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
+            }
+        }
+
+        put("/api/reportes/{id}") {
+            val id = call.parameters["id"]?.toLongOrNull()
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to "ID inválido"))
+                return@put
+            }
+            try {
+                val request = call.receive<ReporteStatusRequest>()
+                if (reportesRepository.updateReporteEstado(id, request.estado, request.validacionAdmin)) {
+                    call.respond(HttpStatusCode.OK, mapOf("success" to true))
+                } else {
+                    call.respond(HttpStatusCode.NotFound, mapOf("success" to false, "message" to "Reporte no encontrado"))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
+            }
+        }
+
+        delete("/api/reportes/{id}") {
+            val id = call.parameters["id"]?.toLongOrNull()
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to "ID inválido"))
+                return@delete
+            }
+            if (reportesRepository.deleteReporte(id)) {
+                call.respond(HttpStatusCode.OK, mapOf("success" to true))
+            } else {
+                call.respond(HttpStatusCode.NotFound, mapOf("success" to false, "message" to "Error al eliminar o no encontrado"))
             }
         }
 
