@@ -50,13 +50,14 @@ fun Application.module() {
             ignoreUnknownKeys = true
             prettyPrint = true
             isLenient = true
+            encodeDefaults = true
         })
     }
 
     install(StatusPages) {
         exception<Throwable> { call, cause ->
             logger.error("ERROR NO CONTROLADO: ${cause.message}", cause)
-            call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error en el servidor: ${cause.message}"))
+            call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false, "message" to cause.message))
         }
     }
 
@@ -81,157 +82,75 @@ fun Application.module() {
             }
         }
 
-        post("/api/auth/register") {
-            val user = call.receive<User>()
-            if (authRepository.registerUser(user)) call.respond(HttpStatusCode.Created, RegisterResponse(true, "OK"))
-            else call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error DB"))
-        }
-
-        post("/api/auth/recover") {
-            val request = call.receive<RecoveryRequest>()
-            val user = authRepository.findUserByEmail(request.email)
-            if (user != null) {
-                val pass = user.password ?: ""
-                val sent = EmailService.sendPasswordRecoveryEmail(user.nombre, user.email, pass)
-                if (sent) call.respond(RegisterResponse(true, "Correo enviado correctamente"))
-                else call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error SMTP"))
-            } else {
-                call.respond(HttpStatusCode.NotFound, RegisterResponse(false, "Email no registrado"))
+        // --- REPORTES (BLOQUE ORGANIZADO) ---
+        route("/api/reportes") {
+            get {
+                call.respond(reportesRepository.getAllReportes())
             }
-        }
 
-        post("/api/auth/update") {
-            try {
-                val user = call.receive<User>()
-                if (authRepository.updateUser(user)) {
-                    call.respond(HttpStatusCode.OK, RegisterResponse(true, "Usuario actualizado"))
-                } else {
-                    call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "No se encontró el ID"))
+            post {
+                try {
+                    val reporte = call.receive<ReporteUnidad>()
+                    val newId = reportesRepository.addReporte(reporte)
+                    if (newId != null) {
+                        call.respond(HttpStatusCode.Created, mapOf("success" to true, "id" to newId))
+                    } else {
+                        call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
+                    }
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
                 }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error: ${e.message}"))
             }
-        }
 
-        // --- RUTAS ---
-        get("/api/rutas") {
-            call.respond(rutasRepository.getAllRutas())
-        }
-
-        post("/api/rutas") {
-            try {
-                val request = call.receive<RutaModel>()
-                if (rutasRepository.addRuta(request.nombre, request.color)) {
-                    call.respond(HttpStatusCode.Created, mapOf("success" to true))
-                } else {
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
+            route("/{id}") {
+                // Este es el endpoint que tu App llama para aceptar/denegar
+                put("/validar") {
+                    val id = call.parameters["id"]?.toLongOrNull()
+                    if (id == null) {
+                        call.respond(HttpStatusCode.BadRequest, "ID inválido")
+                        return@put
+                    }
+                    val request = call.receive<ReporteStatusRequest>()
+                    if (reportesRepository.updateReporteEstado(id, request.estado, request.validacionAdmin)) {
+                        call.respond(HttpStatusCode.OK, mapOf("success" to true))
+                    } else {
+                        call.respond(HttpStatusCode.NotFound, mapOf("success" to false, "message" to "No se pudo actualizar el reporte $id"))
+                    }
                 }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
-            }
-        }
 
-        // --- PARADAS ---
-        get("/api/paradas") {
-            call.respond(paradasRepository.getAllParadas())
-        }
-
-        post("/api/paradas") {
-            try {
-                val request = call.receive<ParadaRequest>()
-                if (paradasRepository.addParada(request.nombre, request.ubicacion)) {
-                    call.respond(HttpStatusCode.Created, mapOf("success" to true))
-                } else {
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
+                put {
+                    val id = call.parameters["id"]?.toLongOrNull() ?: return@put call.respond(HttpStatusCode.BadRequest)
+                    val request = call.receive<ReporteStatusRequest>()
+                    if (reportesRepository.updateReporteEstado(id, request.estado, request.validacionAdmin)) {
+                        call.respond(HttpStatusCode.OK, mapOf("success" to true))
+                    } else {
+                        call.respond(HttpStatusCode.NotFound)
+                    }
                 }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
+
+                delete {
+                    val id = call.parameters["id"]?.toLongOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                    if (reportesRepository.deleteReporte(id)) {
+                        call.respond(HttpStatusCode.OK, mapOf("success" to true))
+                    } else {
+                        call.respond(HttpStatusCode.NotFound, mapOf("success" to false))
+                    }
+                }
             }
         }
 
+        // --- OTROS ---
+        get("/api/paradas") { call.respond(paradasRepository.getAllParadas()) }
         delete("/api/paradas/{id}") {
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to "ID inválido"))
-                return@delete
-            }
-            if (paradasRepository.deleteParadaById(id)) {
-                call.respond(HttpStatusCode.OK, mapOf("success" to true))
-            } else {
-                call.respond(HttpStatusCode.NotFound, mapOf("success" to false, "message" to "No se encontró la parada o error al eliminar"))
-            }
-        }
-
-        // --- REPORTES ---
-        get("/api/reportes") {
-            call.respond(reportesRepository.getAllReportes())
-        }
-
-        post("/api/reportes") {
-            try {
-                val reporte = call.receive<ReporteUnidad>()
-                if (reportesRepository.addReporte(reporte)) {
-                    call.respond(HttpStatusCode.Created, mapOf("success" to true))
-                } else {
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false, "message" to "Error al guardar en DB"))
-                }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
-            }
-        }
-
-        put("/api/reportes/{id}") {
-            val id = call.parameters["id"]?.toLongOrNull()
-            if (id == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to "ID inválido"))
-                return@put
-            }
-            try {
-                val request = call.receive<ReporteStatusRequest>()
-                if (reportesRepository.updateReporteEstado(id, request.estado, request.validacionAdmin)) {
-                    call.respond(HttpStatusCode.OK, mapOf("success" to true))
-                } else {
-                    call.respond(HttpStatusCode.NotFound, mapOf("success" to false, "message" to "Reporte no encontrado"))
-                }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
-            }
-        }
-
-        delete("/api/reportes/{id}") {
-            val id = call.parameters["id"]?.toLongOrNull()
-            if (id == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to "ID inválido"))
-                return@delete
-            }
-            if (reportesRepository.deleteReporte(id)) {
-                call.respond(HttpStatusCode.OK, mapOf("success" to true))
-            } else {
-                call.respond(HttpStatusCode.NotFound, mapOf("success" to false, "message" to "Error al eliminar o no encontrado"))
-            }
-        }
-
-        // --- ADMIN ---
-        get("/api/admin/stats") {
-            try {
-                val est = authRepository.getAllUsersByRol("estudiante").size
-                val cho = authRepository.getAllUsersByRol("chofer").size
-                val rut = rutasRepository.getRutasCount()
-                call.respond(mapOf("estudiantes" to est, "choferes" to cho, "rutas" to rut))
-            } catch (e: Exception) {
-                call.respond(mapOf("estudiantes" to 0, "choferes" to 0, "rutas" to 0))
-            }
-        }
-
-        get("/api/admin/users/{rol}") {
-            val rol = call.parameters["rol"] ?: "chofer"
-            call.respond(authRepository.getAllUsersByRol(rol))
-        }
-
-        delete("/api/admin/users/{id}") {
             val id = call.parameters["id"]?.toIntOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
-            if (authRepository.deleteUser(id)) call.respond(HttpStatusCode.OK)
-            else call.respond(HttpStatusCode.NotFound)
+            if (paradasRepository.deleteParadaById(id)) call.respond(HttpStatusCode.OK) else call.respond(HttpStatusCode.NotFound)
+        }
+        
+        get("/api/admin/stats") {
+            val est = authRepository.getAllUsersByRol("estudiante").size
+            val cho = authRepository.getAllUsersByRol("chofer").size
+            val rut = rutasRepository.getRutasCount()
+            call.respond(mapOf("estudiantes" to est, "choferes" to cho, "rutas" to rut))
         }
     }
 }
