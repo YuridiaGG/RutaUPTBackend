@@ -27,6 +27,7 @@ object Rutas : Table("rutas") {
 object Paradas : Table("paradas") {
     val id = integer("id").autoIncrement()
     val nombre = varchar("nombre", 100)
+    val ubicacion = text("ubicacion").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

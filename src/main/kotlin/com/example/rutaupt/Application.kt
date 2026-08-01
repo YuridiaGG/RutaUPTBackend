@@ -19,7 +19,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class ParadaRequest(val nombre: String)
+data class ParadaRequest(val nombre: String, val ubicacion: String? = null)
 
 fun main() {
     embeddedServer(Netty, port = System.getenv("PORT")?.toInt() ?: 8080,
@@ -134,15 +134,29 @@ fun Application.module() {
         }
 
         post("/api/paradas") {
-            val request = call.receive<ParadaRequest>()
-            if (paradasRepository.addParada(request.nombre)) call.respond(HttpStatusCode.Created, mapOf("success" to true))
-            else call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
+            try {
+                val request = call.receive<ParadaRequest>()
+                if (paradasRepository.addParada(request.nombre, request.ubicacion)) {
+                    call.respond(HttpStatusCode.Created, mapOf("success" to true))
+                } else {
+                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
+            }
         }
 
-        delete("/api/paradas/{nombre}") {
-            val nombre = call.parameters["nombre"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
-            if (paradasRepository.deleteParadaByName(nombre)) call.respond(HttpStatusCode.OK, mapOf("success" to true))
-            else call.respond(HttpStatusCode.NotFound, mapOf("success" to false))
+        delete("/api/paradas/{id}") {
+            val id = call.parameters["id"]?.toIntOrNull()
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to "ID inválido"))
+                return@delete
+            }
+            if (paradasRepository.deleteParadaById(id)) {
+                call.respond(HttpStatusCode.OK, mapOf("success" to true))
+            } else {
+                call.respond(HttpStatusCode.NotFound, mapOf("success" to false, "message" to "No se encontró la parada o error al eliminar"))
+            }
         }
 
         // --- REPORTES ---
