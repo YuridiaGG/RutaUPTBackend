@@ -17,58 +17,79 @@ class ReportesRepository {
             .map { rowToReporte(it) }
     }
 
-    suspend fun addReporte(reporte: ReporteUnidad): Boolean = dbQuery {
+    suspend fun addReporte(reporte: ReporteUnidad): Long? = dbQuery {
         try {
-            // Si el tiempo es "reciente", vacío o nulo, forzamos la fecha del servidor
-            val fechaParaGuardar = if (reporte.tiempo.isNullOrBlank() || 
-                reporte.tiempo.lowercase().contains("reciente")) {
+            // Fix Fechas: Si viene "reciente", ponemos la fecha real del servidor
+            val fechaReal = if (reporte.tiempo.lowercase().contains("reciente") || reporte.tiempo.isBlank()) {
                 LocalDateTime.now().format(formatter)
             } else {
                 reporte.tiempo
             }
 
-            Reportes.insert {
+            val insertedId = Reportes.insert {
+                // Si el móvil ya envió un ID (timestamp), lo usamos. Si no, la DB genera uno.
+                if (reporte.id != null && reporte.id > 0) {
+                    it[id] = reporte.id
+                }
                 it[unidad] = reporte.unidad
                 it[mensaje] = reporte.mensaje
-                it[fechaHora] = fechaParaGuardar
+                it[fechaHora] = fechaReal
                 it[tipo] = reporte.tipo.name
                 it[imagen] = reporte.imagen
                 it[estado] = reporte.estado ?: "PENDIENTE"
                 it[validacionAdmin] = reporte.validacionAdmin
-            }.insertedCount > 0
+            } get Reportes.id
+            insertedId
         } catch (e: Exception) {
             println("Error al insertar reporte: ${e.message}")
-            false
+            null
         }
     }
 
     suspend fun updateReporteEstado(id: Long, nuevoEstado: String, validacion: String?): Boolean = dbQuery {
-        Reportes.update({ Reportes.id eq id }) {
-            it[estado] = nuevoEstado
-            if (validacion != null) {
-                it[validacionAdmin] = validacion
-            }
-        } > 0
+        try {
+            Reportes.update({ Reportes.id eq id }) {
+                it[estado] = nuevoEstado
+                if (validacion != null) {
+                    it[validacionAdmin] = validacion
+                }
+            } > 0
+        } catch (e: Exception) {
+            println("Error al actualizar estado del reporte $id: ${e.message}")
+            false
+        }
     }
 
     suspend fun deleteReporte(id: Long): Boolean = dbQuery {
-        Reportes.deleteWhere { Reportes.id eq id } > 0
+        try {
+            Reportes.deleteWhere { Reportes.id eq id } > 0
+        } catch (e: Exception) {
+            println("Error al borrar reporte $id: ${e.message}")
+            false
+        }
     }
 
-    private fun rowToReporte(row: ResultRow) = ReporteUnidad(
-        id = row[Reportes.id],
-        unidad = row[Reportes.unidad],
-        mensaje = row[Reportes.mensaje],
-        tiempo = row[Reportes.fechaHora],
-        tipo = try { 
-            ReporteTipo.valueOf(row[Reportes.tipo]) 
-        } catch (e: Exception) { 
-            // Manejo de seguridad para tipos nuevos como RETRASO
-            if (row[Reportes.tipo] == "RETRASO") ReporteTipo.RETRASO 
-            else ReporteTipo.INFORMACION
-        },
-        imagen = row[Reportes.imagen],
-        estado = row[Reportes.estado],
-        validacionAdmin = row[Reportes.validacionAdmin]
-    )
+    private fun rowToReporte(row: ResultRow): ReporteUnidad {
+        val tipoStr = row[Reportes.tipo].uppercase()
+        val tipoEnum = try {
+            ReporteTipo.valueOf(tipoStr)
+        } catch (e: Exception) {
+            when (tipoStr) {
+                "RETRASO" -> ReporteTipo.RETRASO
+                "ALERTA" -> ReporteTipo.ALERTA
+                else -> ReporteTipo.INFORMACION
+            }
+        }
+
+        return ReporteUnidad(
+            id = row[Reportes.id],
+            unidad = row[Reportes.unidad],
+            mensaje = row[Reportes.mensaje],
+            tiempo = row[Reportes.fechaHora],
+            tipo = tipoEnum,
+            imagen = row[Reportes.imagen],
+            estado = row[Reportes.estado],
+            validacionAdmin = row[Reportes.validacionAdmin]
+        )
+    }
 }
