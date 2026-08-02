@@ -97,6 +97,36 @@ fun Application.module() {
             }
         }
 
+        post("/api/auth/recover") {
+            try {
+                val request = call.receive<RecoveryRequest>()
+                val user = authRepository.findUserByEmail(request.email)
+                if (user != null) {
+                    val pass = user.password ?: ""
+                    val sent = EmailService.sendPasswordRecoveryEmail(user.nombre, user.email, pass)
+                    if (sent) call.respond(RegisterResponse(true, "Correo enviado correctamente"))
+                    else call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error SMTP/Brevo"))
+                } else {
+                    call.respond(HttpStatusCode.NotFound, RegisterResponse(false, "Email no registrado"))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error: ${e.message}"))
+            }
+        }
+
+        post("/api/auth/update") {
+            try {
+                val user = call.receive<User>()
+                if (authRepository.updateUser(user)) {
+                    call.respond(HttpStatusCode.OK, RegisterResponse(true, "Usuario actualizado"))
+                } else {
+                    call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "No se encontró el ID"))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error: ${e.message}"))
+            }
+        }
+
         // --- RUTAS ---
         get("/api/rutas") {
             call.respond(rutasRepository.getAllRutas())
@@ -115,7 +145,7 @@ fun Application.module() {
             }
         }
 
-        // --- PARADAS (MEJORADO PARA DIAGNÓSTICO) ---
+        // --- PARADAS ---
         get("/api/paradas") {
             call.respond(paradasRepository.getAllParadas())
         }
@@ -133,12 +163,10 @@ fun Application.module() {
                 if (idGenerado != null) {
                     call.respond(HttpStatusCode.Created, mapOf("success" to true, "id" to idGenerado))
                 } else {
-                    // Si el ID es nulo, es que el repositorio atrapó una excepción
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false, "message" to "Error interno en la base de datos al guardar la parada"))
+                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false, "message" to "Error en DB"))
                 }
             } catch (e: Exception) {
-                logger.error("Error al recibir parada: ${e.message}")
-                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to "Error en el formato de datos: ${e.message}"))
+                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
             }
         }
 
