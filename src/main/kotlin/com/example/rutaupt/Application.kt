@@ -17,6 +17,7 @@ import io.ktor.server.routing.*
 import org.slf4j.LoggerFactory
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
+import kotlin.random.Random
 
 @Serializable
 data class ParadaRequest(
@@ -28,6 +29,12 @@ data class ParadaRequest(
 
 @Serializable
 data class ReporteStatusRequest(val estado: String, val validacionAdmin: String? = null)
+
+@Serializable
+data class VerifyCodeRequest(val email: String, val code: String)
+
+@Serializable
+data class ResetPasswordRequest(val email: String, val code: String, val newPassword: String)
 
 fun main() {
     embeddedServer(Netty, port = System.getenv("PORT")?.toInt() ?: 8080,
@@ -97,17 +104,54 @@ fun Application.module() {
             }
         }
 
+        // 1. Generar código y enviar email
         post("/api/auth/recover") {
             try {
                 val request = call.receive<RecoveryRequest>()
                 val user = authRepository.findUserByEmail(request.email)
                 if (user != null) {
-                    val pass = user.password ?: ""
-                    val sent = EmailService.sendPasswordRecoveryEmail(user.nombre, user.email, pass)
-                    if (sent) call.respond(RegisterResponse(true, "Correo enviado correctamente"))
-                    else call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error SMTP/Brevo"))
+                    val code = Random.nextInt(100000, 999999).toString()
+                    if (authRepository.saveRecoveryCode(user.email, code)) {
+                        val sent = EmailService.sendVerificationCode(user.nombre, user.email, code)
+                        if (sent) call.respond(RegisterResponse(true, "Código enviado correctamente"))
+                        else call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error al enviar correo"))
+                    } else {
+                        call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error al generar código"))
+                    }
                 } else {
                     call.respond(HttpStatusCode.NotFound, RegisterResponse(false, "Email no registrado"))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error: ${e.message}"))
+            }
+        }
+
+        // 2. Validar código
+        post("/api/auth/validate-code") {
+            try {
+                val request = call.receive<VerifyCodeRequest>()
+                if (authRepository.validateRecoveryCode(request.email, request.code)) {
+                    call.respond(RegisterResponse(true, "Código válido"))
+                } else {
+                    call.respond(HttpStatusCode.Unauthorized, RegisterResponse(false, "Código inválido o expirado"))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error: ${e.message}"))
+            }
+        }
+
+        // 3. Cambiar contraseña con el código
+        post("/api/auth/reset-password") {
+            try {
+                val request = call.receive<ResetPasswordRequest>()
+                if (authRepository.validateRecoveryCode(request.email, request.code)) {
+                    if (authRepository.resetPassword(request.email, request.newPassword)) {
+                        call.respond(RegisterResponse(true, "Contraseña actualizada exitosamente"))
+                    } else {
+                        call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error al actualizar contraseña"))
+                    }
+                } else {
+                    call.respond(HttpStatusCode.Unauthorized, RegisterResponse(false, "Código inválido o expirado"))
                 }
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error: ${e.message}"))

@@ -2,6 +2,7 @@ package com.example.rutaupt.database
 
 import com.example.rutaupt.database.DatabaseFactory.dbQuery
 import com.example.rutaupt.model.User
+import kotlinx.datetime.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 
@@ -19,7 +20,7 @@ class AuthRepository {
                 it[Usuarios.apellidos] = user.apellidos
                 it[Usuarios.email] = user.email
                 it[Usuarios.password] = user.password ?: ""
-                it[Usuarios.rol] = user.rol.lowercase() // Normalizamos a minúsculas
+                it[Usuarios.rol] = user.rol.lowercase()
                 it[Usuarios.edad] = user.edad
                 it[Usuarios.telefono] = user.telefono
                 it[Usuarios.numeroUnidad] = user.numeroUnidad
@@ -53,14 +54,48 @@ class AuthRepository {
             .singleOrNull()
     }
 
-    // NUEVAS FUNCIONES PARA EL ADMIN - Ahora insensibles a mayúsculas
+    // --- MÉTODOS DE RECUPERACIÓN CON CÓDIGO ---
+
+    suspend fun saveRecoveryCode(email: String, code: String): Boolean = dbQuery {
+        CodigosRecuperacion.deleteWhere { CodigosRecuperacion.email eq email }
+        
+        // Ajustado a 10 minutos según el nuevo formato de correo
+        val exp = Clock.System.now().plus(10, DateTimeUnit.MINUTE).toLocalDateTime(TimeZone.currentSystemDefault())
+        
+        CodigosRecuperacion.insert {
+            it[CodigosRecuperacion.email] = email
+            it[CodigosRecuperacion.codigo] = code
+            it[CodigosRecuperacion.expiracion] = exp
+        }.insertedCount > 0
+    }
+
+    suspend fun validateRecoveryCode(email: String, code: String): Boolean = dbQuery {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+        
+        CodigosRecuperacion.selectAll().where { 
+            (CodigosRecuperacion.email eq email) and 
+            (CodigosRecuperacion.codigo eq code) and 
+            (CodigosRecuperacion.expiracion greater now)
+        }.count() > 0L
+    }
+
+    suspend fun resetPassword(email: String, newPass: String): Boolean = dbQuery {
+        val updated = Usuarios.update({ Usuarios.email eq email }) {
+            it[password] = newPass
+        }
+        if (updated > 0) {
+            CodigosRecuperacion.deleteWhere { CodigosRecuperacion.email eq email }
+            true
+        } else false
+    }
+
+    // --- ADMIN ---
+
     suspend fun getAllUsersByRol(rol: String): List<User> = dbQuery {
-        // Buscamos el rol exacto o su variante (alumno/estudiante)
         val targetRoles = when (rol.lowercase()) {
             "estudiante", "alumno" -> listOf("estudiante", "alumno")
             else -> listOf(rol.lowercase())
         }
-        
         Usuarios.selectAll().where { Usuarios.rol.lowerCase() inList targetRoles }
             .map { rowToUser(it) }
     }

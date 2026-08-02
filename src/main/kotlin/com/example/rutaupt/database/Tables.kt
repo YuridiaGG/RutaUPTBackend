@@ -1,6 +1,7 @@
 package com.example.rutaupt.database
 
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.kotlin.datetime.datetime
 
 object Usuarios : Table("usuarios") {
     val id = integer("id").autoIncrement()
@@ -13,6 +14,14 @@ object Usuarios : Table("usuarios") {
     val telefono = varchar("telefono", 20).nullable()
     val numeroUnidad = varchar("numero_unidad", 20).nullable()
     val horario = varchar("horario", 100).nullable()
+    override val primaryKey = PrimaryKey(id)
+}
+
+object CodigosRecuperacion : Table("codigos_recuperacion") {
+    val id = integer("id").autoIncrement()
+    val email = varchar("email", 100)
+    val codigo = varchar("codigo", 6)
+    val expiracion = datetime("expiracion")
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -31,15 +40,6 @@ object Paradas : Table("paradas") {
     val latitud = decimal("latitud", 10, 8).nullable()
     val longitud = decimal("longitud", 11, 8).nullable()
     override val primaryKey = PrimaryKey(id)
-}
-
-object Horarios : Table("horarios") {
-    val idHorario = integer("id_horario").autoIncrement()
-    val idRuta = integer("id_ruta").references(Rutas.idRuta)
-    val idUsuarioChofer = integer("id_usuario_chofer").references(Usuarios.id)
-    val horaSalida = varchar("hora_salida", 8)
-    val dias = varchar("dias", 50)
-    override val primaryKey = PrimaryKey(idHorario)
 }
 
 object Reportes : Table("reportes") {
