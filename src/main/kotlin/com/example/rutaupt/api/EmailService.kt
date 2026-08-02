@@ -2,6 +2,7 @@ package com.example.rutaupt.api
 
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -34,6 +35,11 @@ object EmailService {
                 prettyPrint = true
             })
         }
+        install(HttpTimeout) {
+            requestTimeoutMillis = 15000
+            connectTimeoutMillis = 10000
+            socketTimeoutMillis = 10000
+        }
     }
 
     private suspend fun sendEmail(name: String, to: String, subject: String, html: String): Boolean = withContext(Dispatchers.IO) {
@@ -41,11 +47,12 @@ object EmailService {
         val senderEmail = System.getenv("SENDER_EMAIL")?.trim() ?: ""
 
         if (apiKey.isEmpty() || senderEmail.isEmpty()) {
-            println("INFO: No se enviará correo a $to porque BREVO_API_KEY o SENDER_EMAIL no están configurados.")
+            println("ERROR: BREVO_API_KEY o SENDER_EMAIL no están configuradas en las variables de entorno.")
             return@withContext false
         }
 
         try {
+            println("Iniciando envío de correo a $to...")
             val response: HttpResponse = client.post("https://api.brevo.com/v3/smtp/email") {
                 header("api-key", apiKey)
                 contentType(ContentType.Application.Json)
@@ -56,9 +63,20 @@ object EmailService {
                     htmlContent = html
                 ))
             }
-            response.status.isSuccess()
+            
+            if (response.status.isSuccess()) {
+                println("¡Correo enviado exitosamente a $to!")
+                true
+            } else {
+                val errorBody = response.bodyAsText()
+                println("Error de Brevo (Status: ${response.status}): $errorBody")
+                false
+            }
+        } catch (e: HttpRequestTimeoutException) {
+            println("Error: Tiempo de espera excedido al contactar con Brevo.")
+            false
         } catch (e: Exception) {
-            println("Error enviando email: ${e.message}")
+            println("Error inesperado enviando email a $to: ${e.message}")
             false
         }
     }
@@ -77,16 +95,13 @@ object EmailService {
                 </div>
 
                 <p>Este código es válido por <strong>10 minutos</strong> y solo puede utilizarse una vez.</p>
-                <p>Una vez que ingreses el código correctamente, podrás crear una nueva contraseña para tu cuenta. También podrás modificarla posteriormente desde la sección <strong>Perfil → Cambiar contraseña</strong>.</p>
-                <p>Si no realizaste esta solicitud, puedes ignorar este mensaje. Tu cuenta permanecerá segura y no se realizará ningún cambio sin la validación del código.</p>
+                <p>Si no realizaste esta solicitud, puedes ignorar este mensaje.</p>
                 
                 <p>Gracias por utilizar RutaUPT.</p>
                 
                 <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px; font-size: 13px; color: #555;">
                     <p style="margin: 0;">Atentamente,</p>
                     <p style="margin: 0; font-weight: bold;">Equipo de Soporte RutaUPT</p>
-                    <p style="margin: 0;">Sistema de Gestión de Transporte Universitario</p>
-                    <p style="margin: 0;">Universidad Politécnica de Tulancingo</p>
                 </div>
             </div>
         """.trimIndent()
