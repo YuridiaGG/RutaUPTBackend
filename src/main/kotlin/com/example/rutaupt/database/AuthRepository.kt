@@ -6,6 +6,7 @@ import kotlinx.datetime.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
 
 class AuthRepository {
     suspend fun findUserByEmail(email: String): User? = dbQuery {
@@ -60,9 +61,6 @@ class AuthRepository {
     suspend fun saveRecoveryCode(email: String, recoveryCode: String): Boolean = dbQuery {
         val cleanEmail = email.trim().lowercase()
         val expiracionMilis = Clock.System.now().plus(10, DateTimeUnit.MINUTE).toEpochMilliseconds()
-        
-        // Guardamos el código nuevo. NO borramos los anteriores.
-        // Esto permite que si te llegan 3 correos, los 3 códigos funcionen.
         RecoveryTokens.insert {
             it[RecoveryTokens.email] = cleanEmail
             it[RecoveryTokens.code] = recoveryCode.trim()
@@ -74,27 +72,12 @@ class AuthRepository {
         val cleanEmail = email.trim().lowercase()
         val cleanCode = recoveryCode.trim()
         val now = Clock.System.now().toEpochMilliseconds()
-
-        println("=== VALIDANDO CÓDIGO (Multi-Intento) ===")
-        println("Email: '$cleanEmail' | Código ingresado: '$cleanCode'")
-
-        // Buscamos si existe ALGÚN registro para este email con este código que no haya expirado
         val match = RecoveryTokens.selectAll().where {
             (RecoveryTokens.email.lowerCase() eq cleanEmail) and
             (RecoveryTokens.code eq cleanCode) and
             (RecoveryTokens.expiry greater now)
         }.count() > 0
-
-        if (match) {
-            println("¡ÉXITO! Código válido encontrado.")
-            true
-        } else {
-            val activos = RecoveryTokens.selectAll()
-                .where { (RecoveryTokens.email.lowerCase() eq cleanEmail) and (RecoveryTokens.expiry greater now) }
-                .map { it[RecoveryTokens.code] }
-            println("FALLO: El código '$cleanCode' no coincide. Códigos activos en DB: $activos")
-            false
-        }
+        match
     }
 
     suspend fun resetPassword(email: String, newPass: String): Boolean = dbQuery {
@@ -103,18 +86,25 @@ class AuthRepository {
             it[password] = newPass
         }
         if (updated > 0) {
-            // Al cambiar la contraseña, limpiamos todos los tokens
             RecoveryTokens.deleteWhere { RecoveryTokens.email.lowerCase() eq cleanEmail }
             true
         } else false
     }
 
+    // --- ADMIN: Búsqueda de usuarios por rol (corregido para que no desaparezcan) ---
     suspend fun getAllUsersByRol(rol: String): List<User> = dbQuery {
-        val targetRoles = when (rol.lowercase()) {
-            "estudiante", "alumno" -> listOf("estudiante", "alumno")
-            else -> listOf(rol.lowercase())
+        val r = rol.lowercase().trim()
+        // Buscamos coincidencia exacta o que empiece por el nombre (ej: "chofer" encuentra "choferes")
+        val searchPattern = when {
+            r.startsWith("estud") -> "estud%"
+            r.startsWith("alum") -> "alum%"
+            r.startsWith("chof") -> "chof%"
+            r.startsWith("cond") -> "cond%"
+            r.endsWith("s") -> r.dropLast(1) + "%"
+            else -> "$r%"
         }
-        Usuarios.selectAll().where { Usuarios.rol.lowerCase() inList targetRoles }
+        
+        Usuarios.selectAll().where { Usuarios.rol.lowerCase() like searchPattern }
             .map { rowToUser(it) }
     }
 

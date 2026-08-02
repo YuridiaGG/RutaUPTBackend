@@ -95,47 +95,40 @@ fun Application.module() {
     routing {
         get("/") { call.respondText("Servidor RutaUPT Online") }
 
-        // --- LOGIN ---
+        // --- AUTH ---
         post("/api/auth/login") {
             try {
                 val request = call.receive<LoginRequest>()
                 val email = request.email ?: request.mail ?: ""
                 val password = request.pass ?: request.password ?: ""
-
                 val user = authRepository.findUserByEmail(email)
                 val dbPass = authRepository.getUserPassword(email)
-
                 if (user != null && dbPass == password) {
                     call.respond(LoginResponse(true, "OK", user))
                 } else {
                     call.respond(HttpStatusCode.Unauthorized, LoginResponse(false, "Correo o contraseña incorrectos"))
                 }
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, LoginResponse(false, "Error en los datos enviados"))
+                call.respond(HttpStatusCode.BadRequest, LoginResponse(false, "Error en los datos"))
             }
         }
 
-        // --- VERIFICAR CÓDIGO (Corregido para devolver el usuario) ---
         post("/api/auth/verify-code") {
             try {
                 val request = call.receive<VerifyCodeRequest>()
                 val email = request.email ?: request.mail ?: ""
                 val code = request.code ?: request.codigo ?: ""
-                
                 if (authRepository.validateRecoveryCode(email, code)) {
                     val user = authRepository.findUserByEmail(email)
-                    // Devolvemos LoginResponse en lugar de RegisterResponse para incluir al usuario
                     call.respond(LoginResponse(true, "Código válido", user))
                 } else {
                     call.respond(HttpStatusCode.OK, LoginResponse(false, "Código incorrecto o expirado"))
                 }
             } catch (e: Exception) {
-                logger.error("Error en verify-code: ${e.message}")
-                call.respond(HttpStatusCode.BadRequest, LoginResponse(false, "Error al procesar la verificación"))
+                call.respond(HttpStatusCode.BadRequest, LoginResponse(false, "Error de verificación"))
             }
         }
 
-        // --- RECUPERAR (ENVIAR CÓDIGO) ---
         post("/api/auth/recover") {
             try {
                 val request = call.receive<RecoveryRequest>()
@@ -150,37 +143,34 @@ fun Application.module() {
                         call.respond(RegisterResponse(false, "Error al generar código"))
                     }
                 } else {
-                    call.respond(RegisterResponse(false, "El correo no está registrado"))
+                    call.respond(RegisterResponse(false, "Email no registrado"))
                 }
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error en la solicitud"))
+                call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error"))
             }
         }
 
-        // --- RESTABLECER CONTRASEÑA ---
         post("/api/auth/reset-password") {
             try {
                 val request = call.receive<ResetPasswordRequest>()
                 val email = request.email ?: request.mail ?: ""
                 val code = request.code ?: request.codigo ?: ""
                 val newPass = request.newPassword ?: request.pass ?: ""
-                
                 if (authRepository.validateRecoveryCode(email, code)) {
                     if (authRepository.resetPassword(email, newPass)) {
                         val user = authRepository.findUserByEmail(email)
                         call.respond(LoginResponse(true, "Contraseña actualizada", user))
                     } else {
-                        call.respond(LoginResponse(false, "No se pudo actualizar"))
+                        call.respond(LoginResponse(false, "Error al actualizar"))
                     }
                 } else {
                     call.respond(LoginResponse(false, "Código inválido"))
                 }
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, LoginResponse(false, "Error al restablecer"))
+                call.respond(HttpStatusCode.BadRequest, LoginResponse(false, "Error"))
             }
         }
 
-        // --- REGISTRO ---
         post("/api/auth/register") {
             try {
                 val user = call.receive<User>()
@@ -195,9 +185,7 @@ fun Application.module() {
             }
         }
 
-        get("/api/rutas") { call.respond(rutasRepository.getAllRutas()) }
-        get("/api/paradas") { call.respond(paradasRepository.getAllParadas()) }
-        
+        // --- REPORTES ---
         route("/api/reportes") {
             get { call.respond(reportesRepository.getAllReportes()) }
             post {
@@ -208,6 +196,27 @@ fun Application.module() {
                     else call.respond(HttpStatusCode.InternalServerError)
                 } catch (e: Exception) { call.respond(HttpStatusCode.BadRequest) }
             }
+            put("/{id}/validar") {
+                val id = call.parameters["id"]?.toLongOrNull() ?: return@put call.respond(HttpStatusCode.BadRequest)
+                val req = call.receive<ReporteStatusRequest>()
+                if (reportesRepository.updateReporteEstado(id, req.estado, req.validacionAdmin)) call.respond(HttpStatusCode.OK)
+                else call.respond(HttpStatusCode.NotFound)
+            }
         }
+
+        // --- ADMIN ---
+        get("/api/admin/stats") {
+            val est = authRepository.getAllUsersByRol("estudiante").size
+            val cho = authRepository.getAllUsersByRol("chofer").size
+            val rut = rutasRepository.getRutasCount()
+            call.respond(mapOf("estudiantes" to est, "choferes" to cho, "rutas" to rut))
+        }
+        get("/api/admin/users/{rol}") {
+            val rol = call.parameters["rol"] ?: "chofer"
+            call.respond(authRepository.getAllUsersByRol(rol))
+        }
+
+        get("/api/rutas") { call.respond(rutasRepository.getAllRutas()) }
+        get("/api/paradas") { call.respond(paradasRepository.getAllParadas()) }
     }
 }
