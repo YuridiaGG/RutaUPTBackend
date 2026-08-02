@@ -28,6 +28,8 @@ object Paradas : Table("paradas") {
     val id = integer("id").autoIncrement()
     val nombre = varchar("nombre", 100)
     val ubicacion = text("ubicacion").nullable()
+    val latitud = decimal("latitud", 10, 8).nullable()
+    val longitud = decimal("longitud", 11, 8).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -44,8 +46,8 @@ object Reportes : Table("reportes") {
     val id = long("id").autoIncrement()
     val unidad = varchar("unidad", 20)
     val mensaje = text("mensaje")
-    val fechaHora = varchar("fecha_hora", 50) 
-    val tipo = varchar("tipo", 50) 
+    val fechaHora = varchar("fecha_hora", 50)
+    val tipo = varchar("tipo", 50)
     val imagen = text("imagen").nullable()
     val estado = varchar("estado", 50).nullable()
     val validacionAdmin = text("validacion_admin").nullable()

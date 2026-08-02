@@ -13,8 +13,7 @@ object DatabaseFactory {
     private var dbInstance: Database? = null
 
     fun init() {
-        // Priorizamos variables de entorno para producción (Railway)
-        // Pero usamos localhost como respaldo para desarrollo local, igual que tenías en la raíz
+        // Volvemos a la configuración LOCAL por defecto para recuperar tus datos
         val host = System.getenv("MYSQLHOST") ?: "localhost"
         val port = System.getenv("MYSQLPORT") ?: "3306"
         val dbName = System.getenv("MYSQLDATABASE") ?: "railway"
@@ -40,17 +39,13 @@ object DatabaseFactory {
             dbInstance = Database.connect(HikariDataSource(config))
 
             transaction(dbInstance) {
-                // Creamos las tablas si no existen
-                SchemaUtils.create(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
-                
-                // Sincronizamos columnas nuevas sin borrar datos
+                // Sincronizamos las tablas y agregamos las columnas lat/long si no existen
                 SchemaUtils.createMissingTablesAndColumns(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
-                
                 seedUser("admin@upt.com", "Admin", "Admin", "admin")
             }
-            logger.info("Base de datos conectada correctamente (Host: $host)")
+            logger.info("Base de datos local conectada correctamente en: $host")
         } catch (e: Exception) {
-            logger.error("ERROR DE CONEXIÓN A BASE DE DATOS: ${e.message}")
+            logger.error("ERROR DE CONEXIÓN A DB: ${e.message}")
         }
     }
 

@@ -41,7 +41,7 @@ object EmailService {
         val senderEmail = System.getenv("SENDER_EMAIL")?.trim() ?: ""
 
         if (apiKey.isEmpty() || senderEmail.isEmpty()) {
-            println("ERROR: Faltan variables BREVO_API_KEY o SENDER_EMAIL.")
+            println("INFO: No se enviará correo a $to porque BREVO_API_KEY o SENDER_EMAIL no están configurados.")
             return@withContext false
         }
 
@@ -78,7 +78,7 @@ object EmailService {
         val html = """
             <div style="font-family: sans-serif; padding: 20px;">
                 <h2>¡Bienvenido a RutaUPT!</h2>
-                <p>Hola $name, tu cuenta como <strong>$rol</strong> ha sido creada.</p>
+                <p>Hola $name, tu cuenta como <strong>$rol</strong> ha sido creada exitosamente.</p>
             </div>
         """.trimIndent()
         return sendEmail(name, to, "Bienvenido a RutaUPT", html)

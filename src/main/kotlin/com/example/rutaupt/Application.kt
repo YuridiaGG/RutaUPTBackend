@@ -19,7 +19,12 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class ParadaRequest(val nombre: String, val ubicacion: String? = null)
+data class ParadaRequest(
+    val nombre: String,
+    val ubicacion: String? = null,
+    val latitud: Double? = null,
+    val longitud: Double? = null
+)
 
 @Serializable
 data class ReporteStatusRequest(val estado: String, val validacionAdmin: String? = null)
@@ -84,33 +89,11 @@ fun Application.module() {
 
         post("/api/auth/register") {
             val user = call.receive<User>()
-            if (authRepository.registerUser(user)) call.respond(HttpStatusCode.Created, RegisterResponse(true, "OK"))
-            else call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error DB"))
-        }
-
-        post("/api/auth/recover") {
-            val request = call.receive<RecoveryRequest>()
-            val user = authRepository.findUserByEmail(request.email)
-            if (user != null) {
-                val pass = user.password ?: ""
-                val sent = EmailService.sendPasswordRecoveryEmail(user.nombre, user.email, pass)
-                if (sent) call.respond(RegisterResponse(true, "Correo enviado correctamente"))
-                else call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error SMTP"))
+            if (authRepository.registerUser(user)) {
+                EmailService.sendWelcomeEmail(user.nombre, user.email, user.rol)
+                call.respond(HttpStatusCode.Created, RegisterResponse(true, "OK"))
             } else {
-                call.respond(HttpStatusCode.NotFound, RegisterResponse(false, "Email no registrado"))
-            }
-        }
-
-        post("/api/auth/update") {
-            try {
-                val user = call.receive<User>()
-                if (authRepository.updateUser(user)) {
-                    call.respond(HttpStatusCode.OK, RegisterResponse(true, "Usuario actualizado"))
-                } else {
-                    call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "No se encontró el ID"))
-                }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error: ${e.message}"))
+                call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error DB"))
             }
         }
 
@@ -132,7 +115,7 @@ fun Application.module() {
             }
         }
 
-        // --- PARADAS ---
+        // --- PARADAS (MEJORADO PARA DIAGNÓSTICO) ---
         get("/api/paradas") {
             call.respond(paradasRepository.getAllParadas())
         }
@@ -140,13 +123,22 @@ fun Application.module() {
         post("/api/paradas") {
             try {
                 val request = call.receive<ParadaRequest>()
-                if (paradasRepository.addParada(request.nombre, request.ubicacion)) {
-                    call.respond(HttpStatusCode.Created, mapOf("success" to true))
+                val nuevaParada = Parada(
+                    nombre = request.nombre,
+                    ubicacion = request.ubicacion,
+                    latitud = request.latitud,
+                    longitud = request.longitud
+                )
+                val idGenerado = paradasRepository.addParada(nuevaParada)
+                if (idGenerado != null) {
+                    call.respond(HttpStatusCode.Created, mapOf("success" to true, "id" to idGenerado))
                 } else {
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
+                    // Si el ID es nulo, es que el repositorio atrapó una excepción
+                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false, "message" to "Error interno en la base de datos al guardar la parada"))
                 }
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
+                logger.error("Error al recibir parada: ${e.message}")
+                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to "Error en el formato de datos: ${e.message}"))
             }
         }
 
@@ -156,26 +148,19 @@ fun Application.module() {
             else call.respond(HttpStatusCode.NotFound)
         }
 
-        // --- REPORTES (BLOQUE CORREGIDO) ---
+        // --- REPORTES ---
         route("/api/reportes") {
-            get {
-                call.respond(reportesRepository.getAllReportes())
-            }
-
+            get { call.respond(reportesRepository.getAllReportes()) }
             post {
                 try {
                     val reporte = call.receive<ReporteUnidad>()
                     val newId = reportesRepository.addReporte(reporte)
-                    if (newId != null) {
-                        call.respond(HttpStatusCode.Created, mapOf("success" to true, "id" to newId))
-                    } else {
-                        call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
-                    }
+                    if (newId != null) call.respond(HttpStatusCode.Created, mapOf("success" to true, "id" to newId))
+                    else call.respond(HttpStatusCode.InternalServerError)
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
+                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Error")
                 }
             }
-
             route("/{id}") {
                 put("/validar") {
                     val id = call.parameters["id"]?.toLongOrNull() ?: return@put call.respond(HttpStatusCode.BadRequest)
@@ -183,10 +168,9 @@ fun Application.module() {
                     if (reportesRepository.updateReporteEstado(id, request.estado, request.validacionAdmin)) {
                         call.respond(HttpStatusCode.OK, mapOf("success" to true))
                     } else {
-                        call.respond(HttpStatusCode.NotFound, mapOf("success" to false))
+                        call.respond(HttpStatusCode.NotFound)
                     }
                 }
-
                 delete {
                     val id = call.parameters["id"]?.toLongOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
                     if (reportesRepository.deleteReporte(id)) call.respond(HttpStatusCode.OK, mapOf("success" to true))

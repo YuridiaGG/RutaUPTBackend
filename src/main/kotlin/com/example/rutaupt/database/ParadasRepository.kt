@@ -1,12 +1,10 @@
 package com.example.rutaupt.database
 
 import com.example.rutaupt.database.DatabaseFactory.dbQuery
-import kotlinx.serialization.Serializable
+import com.example.rutaupt.model.Parada
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-
-@Serializable
-data class Parada(val id: Int? = null, val nombre: String, val ubicacion: String? = null)
+import java.math.BigDecimal
 
 class ParadasRepository {
     suspend fun getAllParadas(): List<Parada> = dbQuery {
@@ -14,25 +12,26 @@ class ParadasRepository {
             Parada(
                 id = row[Paradas.id],
                 nombre = row[Paradas.nombre],
-                ubicacion = row[Paradas.ubicacion]
+                ubicacion = row[Paradas.ubicacion],
+                latitud = row[Paradas.latitud]?.toDouble(),
+                longitud = row[Paradas.longitud]?.toDouble()
             )
         }
     }
 
-    suspend fun addParada(nombre: String, ubicacion: String?): Boolean = dbQuery {
+    suspend fun addParada(parada: Parada): Int? = dbQuery {
         try {
-            Paradas.insert {
-                it[Paradas.nombre] = nombre
-                it[Paradas.ubicacion] = ubicacion
-            }.insertedCount > 0
+            val result = Paradas.insert { statement ->
+                statement[Paradas.nombre] = parada.nombre
+                statement[Paradas.ubicacion] = parada.ubicacion
+                statement[Paradas.latitud] = parada.latitud?.let { BigDecimal.valueOf(it) }
+                statement[Paradas.longitud] = parada.longitud?.let { BigDecimal.valueOf(it) }
+            }
+            result[Paradas.id]
         } catch (e: Exception) {
-            println("Error al insertar parada: ${e.message}")
-            false
+            println("ERROR AL GUARDAR PARADA EN DB: ${e.message}")
+            null
         }
-    }
-
-    suspend fun deleteParadaByName(nombre: String): Boolean = dbQuery {
-        Paradas.deleteWhere { Paradas.nombre eq nombre } > 0
     }
 
     suspend fun deleteParadaById(id: Int): Boolean = dbQuery {
