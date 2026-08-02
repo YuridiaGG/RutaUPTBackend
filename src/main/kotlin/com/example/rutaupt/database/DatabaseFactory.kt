@@ -13,7 +13,6 @@ object DatabaseFactory {
     private var dbInstance: Database? = null
 
     fun init() {
-        // Volvemos a la configuración LOCAL por defecto para recuperar tus datos
         val host = System.getenv("MYSQLHOST") ?: "localhost"
         val port = System.getenv("MYSQLPORT") ?: "3306"
         val dbName = System.getenv("MYSQLDATABASE") ?: "railway"
@@ -39,13 +38,22 @@ object DatabaseFactory {
             dbInstance = Database.connect(HikariDataSource(config))
 
             transaction(dbInstance) {
-                // Sincronizamos las tablas y agregamos las columnas lat/long si no existen
-                SchemaUtils.createMissingTablesAndColumns(Usuarios, Rutas, Paradas, Horarios, Reportes, UbicacionesTiempoReal)
+                // Agregamos CodigosRecuperacion a la creación sincronizada
+                SchemaUtils.createMissingTablesAndColumns(
+                    Usuarios, 
+                    CodigosRecuperacion, 
+                    Rutas, 
+                    Paradas, 
+                    Horarios, 
+                    Reportes, 
+                    UbicacionesTiempoReal
+                )
                 seedUser("admin@upt.com", "Admin", "Admin", "admin")
             }
-            logger.info("Base de datos local conectada correctamente en: $host")
+            logger.info("Base de datos conectada y sincronizada (Host: $host)")
         } catch (e: Exception) {
             logger.error("ERROR DE CONEXIÓN A DB: ${e.message}")
+            e.printStackTrace()
         }
     }
 

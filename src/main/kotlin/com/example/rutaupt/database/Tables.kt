@@ -42,6 +42,15 @@ object Paradas : Table("paradas") {
     override val primaryKey = PrimaryKey(id)
 }
 
+object Horarios : Table("horarios") {
+    val idHorario = integer("id_horario").autoIncrement()
+    val idRuta = integer("id_ruta").references(Rutas.idRuta)
+    val idUsuarioChofer = integer("id_usuario_chofer").references(Usuarios.id)
+    val horaSalida = varchar("hora_salida", 8)
+    val dias = varchar("dias", 50)
+    override val primaryKey = PrimaryKey(idHorario)
+}
+
 object Reportes : Table("reportes") {
     val id = long("id").autoIncrement()
     val unidad = varchar("unidad", 20)
