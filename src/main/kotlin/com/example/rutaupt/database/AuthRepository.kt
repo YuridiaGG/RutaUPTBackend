@@ -5,6 +5,7 @@ import com.example.rutaupt.model.User
 import kotlinx.datetime.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
 
 class AuthRepository {
     suspend fun findUserByEmail(email: String): User? = dbQuery {
@@ -54,16 +55,14 @@ class AuthRepository {
             .singleOrNull()
     }
 
-    // --- RECUPERACIÓN CON CÓDIGO (SINCRONIZADO CON RecoveryTokens) ---
+    // --- SISTEMA DE RECUPERACIÓN ---
 
     suspend fun saveRecoveryCode(email: String, recoveryCode: String): Boolean = dbQuery {
         val cleanEmail = email.trim().lowercase()
-        // Limpiamos códigos anteriores
-        RecoveryTokens.deleteWhere { RecoveryTokens.email.lowerCase() eq cleanEmail }
-        
-        // Expiración en 10 minutos (milisegundos universales)
         val expiracionMilis = Clock.System.now().plus(10, DateTimeUnit.MINUTE).toEpochMilliseconds()
         
+        // Guardamos el código nuevo. NO borramos los anteriores.
+        // Esto permite que si te llegan 3 correos, los 3 códigos funcionen.
         RecoveryTokens.insert {
             it[RecoveryTokens.email] = cleanEmail
             it[RecoveryTokens.code] = recoveryCode.trim()
@@ -74,32 +73,28 @@ class AuthRepository {
     suspend fun validateRecoveryCode(email: String, recoveryCode: String): Boolean = dbQuery {
         val cleanEmail = email.trim().lowercase()
         val cleanCode = recoveryCode.trim()
-        val nowMilis = Clock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
 
-        // Buscamos el token en la tabla RecoveryTokens
-        val token = RecoveryTokens.selectAll()
-            .where { RecoveryTokens.email.lowerCase() eq cleanEmail }
-            .orderBy(RecoveryTokens.id to SortOrder.DESC)
-            .limit(1)
-            .singleOrNull()
+        println("=== VALIDANDO CÓDIGO (Multi-Intento) ===")
+        println("Email: '$cleanEmail' | Código ingresado: '$cleanCode'")
 
-        if (token == null) {
-            println("VALIDACIÓN: No existe código para $cleanEmail")
-            return@dbQuery false
+        // Buscamos si existe ALGÚN registro para este email con este código que no haya expirado
+        val match = RecoveryTokens.selectAll().where {
+            (RecoveryTokens.email.lowerCase() eq cleanEmail) and
+            (RecoveryTokens.code eq cleanCode) and
+            (RecoveryTokens.expiry greater now)
+        }.count() > 0
+
+        if (match) {
+            println("¡ÉXITO! Código válido encontrado.")
+            true
+        } else {
+            val activos = RecoveryTokens.selectAll()
+                .where { (RecoveryTokens.email.lowerCase() eq cleanEmail) and (RecoveryTokens.expiry greater now) }
+                .map { it[RecoveryTokens.code] }
+            println("FALLO: El código '$cleanCode' no coincide. Códigos activos en DB: $activos")
+            false
         }
-
-        val dbCode = token[RecoveryTokens.code].trim()
-        val dbExp = token[RecoveryTokens.expiry]
-        
-        println("VALIDANDO: Email=$cleanEmail | AppCode=$cleanCode | DBCode=$dbCode | Exp=$dbExp | Now=$nowMilis")
-
-        val esValido = dbCode == cleanCode && dbExp > nowMilis
-        
-        if (esValido) println("¡ÉXITO: Código validado!")
-        else if (dbExp <= nowMilis) println("FALLO: El código expiró.")
-        else println("FALLO: El código no coincide.")
-
-        esValido
     }
 
     suspend fun resetPassword(email: String, newPass: String): Boolean = dbQuery {
@@ -108,12 +103,11 @@ class AuthRepository {
             it[password] = newPass
         }
         if (updated > 0) {
+            // Al cambiar la contraseña, limpiamos todos los tokens
             RecoveryTokens.deleteWhere { RecoveryTokens.email.lowerCase() eq cleanEmail }
             true
         } else false
     }
-
-    // --- ADMIN ---
 
     suspend fun getAllUsersByRol(rol: String): List<User> = dbQuery {
         val targetRoles = when (rol.lowercase()) {
@@ -122,14 +116,6 @@ class AuthRepository {
         }
         Usuarios.selectAll().where { Usuarios.rol.lowerCase() inList targetRoles }
             .map { rowToUser(it) }
-    }
-
-    suspend fun deleteUser(id: Int): Boolean = dbQuery {
-        Usuarios.deleteWhere { Usuarios.id eq id } > 0
-    }
-    
-    suspend fun getRoutesCount(): Long = dbQuery {
-        Rutas.selectAll().count()
     }
 
     private fun rowToUser(row: ResultRow) = User(

@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 import kotlin.random.Random
+import kotlinx.coroutines.launch
 
 @Serializable
 data class ParadaRequest(
@@ -30,7 +31,6 @@ data class ParadaRequest(
 @Serializable
 data class ReporteStatusRequest(val estado: String, val validacionAdmin: String? = null)
 
-// Clases de petición más flexibles
 @Serializable
 data class VerifyCodeRequest(
     val email: String? = null,
@@ -95,7 +95,6 @@ fun Application.module() {
     routing {
         get("/") { call.respondText("Servidor RutaUPT Online") }
 
-        // --- AUTH ---
         post("/api/auth/login") {
             val request = call.receive<LoginRequest>()
             val user = authRepository.findUserByEmail(request.email)
@@ -110,14 +109,13 @@ fun Application.module() {
         post("/api/auth/register") {
             val user = call.receive<User>()
             if (authRepository.registerUser(user)) {
-                EmailService.sendWelcomeEmail(user.nombre, user.email, user.rol)
+                launch { EmailService.sendWelcomeEmail(user.nombre, user.email, user.rol) }
                 call.respond(HttpStatusCode.Created, RegisterResponse(true, "OK"))
             } else {
                 call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error DB"))
             }
         }
 
-        // 1. Enviar código
         post("/api/auth/recover") {
             try {
                 val request = call.receive<RecoveryRequest>()
@@ -125,9 +123,11 @@ fun Application.module() {
                 if (user != null) {
                     val code = Random.nextInt(100000, 999999).toString()
                     if (authRepository.saveRecoveryCode(user.email, code)) {
-                        val sent = EmailService.sendVerificationCode(user.nombre, user.email, code)
-                        if (sent) call.respond(RegisterResponse(true, "Código enviado correctamente"))
-                        else call.respond(HttpStatusCode.OK, RegisterResponse(false, "Fallo al enviar correo"))
+                        // Enviamos el correo en segundo plano para no bloquear al usuario
+                        launch {
+                            EmailService.sendVerificationCode(user.nombre, user.email, code)
+                        }
+                        call.respond(RegisterResponse(true, "Si el email es correcto, recibirás un código pronto."))
                     } else {
                         call.respond(HttpStatusCode.OK, RegisterResponse(false, "Error al generar código"))
                     }
@@ -139,7 +139,6 @@ fun Application.module() {
             }
         }
 
-        // 2. Validar código (Corregido a verify-code para coincidir con la App)
         post("/api/auth/verify-code") {
             try {
                 val request = call.receive<VerifyCodeRequest>()
@@ -156,7 +155,6 @@ fun Application.module() {
             }
         }
 
-        // 3. Cambiar contraseña
         post("/api/auth/reset-password") {
             try {
                 val request = call.receive<ResetPasswordRequest>()
@@ -191,19 +189,9 @@ fun Application.module() {
             }
         }
 
-        // --- RUTAS / PARADAS / REPORTES ---
         get("/api/rutas") { call.respond(rutasRepository.getAllRutas()) }
         get("/api/paradas") { call.respond(paradasRepository.getAllParadas()) }
-        post("/api/paradas") {
-            try {
-                val req = call.receive<ParadaRequest>()
-                val id = paradasRepository.addParada(Parada(nombre = req.nombre, ubicacion = req.ubicacion, latitud = req.latitud, longitud = req.longitud))
-                if (id != null) call.respond(HttpStatusCode.Created, mapOf("success" to true, "id" to id))
-                else call.respond(HttpStatusCode.InternalServerError)
-            } catch (e: Exception) { call.respond(HttpStatusCode.BadRequest, e.message ?: "") }
-        }
         
-        // --- REPORTES ---
         route("/api/reportes") {
             get { call.respond(reportesRepository.getAllReportes()) }
             post {
@@ -222,16 +210,11 @@ fun Application.module() {
             }
         }
 
-        // --- ADMIN ---
         get("/api/admin/stats") {
             val est = authRepository.getAllUsersByRol("estudiante").size
             val cho = authRepository.getAllUsersByRol("chofer").size
             val rut = rutasRepository.getRutasCount()
             call.respond(mapOf("estudiantes" to est, "choferes" to cho, "rutas" to rut))
-        }
-        get("/api/admin/users/{rol}") {
-            val rol = call.parameters["rol"] ?: "chofer"
-            call.respond(authRepository.getAllUsersByRol(rol))
         }
     }
 }
