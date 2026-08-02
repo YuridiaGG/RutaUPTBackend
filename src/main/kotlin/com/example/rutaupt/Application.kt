@@ -81,8 +81,8 @@ fun Application.module() {
 
     install(StatusPages) {
         exception<Throwable> { call, cause ->
-            logger.error("ERROR NO CONTROLADO: ${cause.message}", cause)
-            call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false, "message" to cause.message))
+            logger.error("ERROR CRÍTICO: ${cause.message}", cause)
+            call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false, "message" to "Error interno del servidor"))
         }
     }
 
@@ -95,50 +95,27 @@ fun Application.module() {
     routing {
         get("/") { call.respondText("Servidor RutaUPT Online") }
 
+        // --- LOGIN ---
         post("/api/auth/login") {
-            val request = call.receive<LoginRequest>()
-            val user = authRepository.findUserByEmail(request.email)
-            val dbPass = authRepository.getUserPassword(request.email)
-            if (user != null && dbPass == request.pass) {
-                call.respond(LoginResponse(true, "OK", user))
-            } else {
-                call.respond(HttpStatusCode.Unauthorized, LoginResponse(false, "Credenciales incorrectas"))
-            }
-        }
-
-        post("/api/auth/register") {
-            val user = call.receive<User>()
-            if (authRepository.registerUser(user)) {
-                launch { EmailService.sendWelcomeEmail(user.nombre, user.email, user.rol) }
-                call.respond(HttpStatusCode.Created, RegisterResponse(true, "OK"))
-            } else {
-                call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error DB"))
-            }
-        }
-
-        post("/api/auth/recover") {
             try {
-                val request = call.receive<RecoveryRequest>()
-                val user = authRepository.findUserByEmail(request.email)
-                if (user != null) {
-                    val code = Random.nextInt(100000, 999999).toString()
-                    if (authRepository.saveRecoveryCode(user.email, code)) {
-                        // Enviamos el correo en segundo plano para no bloquear al usuario
-                        launch {
-                            EmailService.sendVerificationCode(user.nombre, user.email, code)
-                        }
-                        call.respond(RegisterResponse(true, "Si el email es correcto, recibirás un código pronto."))
-                    } else {
-                        call.respond(HttpStatusCode.OK, RegisterResponse(false, "Error al generar código"))
-                    }
+                val request = call.receive<LoginRequest>()
+                val email = request.email ?: request.mail ?: ""
+                val password = request.pass ?: request.password ?: ""
+
+                val user = authRepository.findUserByEmail(email)
+                val dbPass = authRepository.getUserPassword(email)
+
+                if (user != null && dbPass == password) {
+                    call.respond(LoginResponse(true, "OK", user))
                 } else {
-                    call.respond(HttpStatusCode.OK, RegisterResponse(false, "Email no registrado"))
+                    call.respond(HttpStatusCode.Unauthorized, LoginResponse(false, "Correo o contraseña incorrectos"))
                 }
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error: ${e.message}"))
+                call.respond(HttpStatusCode.BadRequest, LoginResponse(false, "Error en los datos enviados"))
             }
         }
 
+        // --- VERIFICAR CÓDIGO (Corregido para devolver el usuario) ---
         post("/api/auth/verify-code") {
             try {
                 val request = call.receive<VerifyCodeRequest>()
@@ -146,15 +123,41 @@ fun Application.module() {
                 val code = request.code ?: request.codigo ?: ""
                 
                 if (authRepository.validateRecoveryCode(email, code)) {
-                    call.respond(RegisterResponse(true, "Código válido"))
+                    val user = authRepository.findUserByEmail(email)
+                    // Devolvemos LoginResponse en lugar de RegisterResponse para incluir al usuario
+                    call.respond(LoginResponse(true, "Código válido", user))
                 } else {
-                    call.respond(HttpStatusCode.OK, RegisterResponse(false, "Código incorrecto o expirado"))
+                    call.respond(HttpStatusCode.OK, LoginResponse(false, "Código incorrecto o expirado"))
                 }
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error: ${e.message}"))
+                logger.error("Error en verify-code: ${e.message}")
+                call.respond(HttpStatusCode.BadRequest, LoginResponse(false, "Error al procesar la verificación"))
             }
         }
 
+        // --- RECUPERAR (ENVIAR CÓDIGO) ---
+        post("/api/auth/recover") {
+            try {
+                val request = call.receive<RecoveryRequest>()
+                val email = request.email ?: request.mail ?: ""
+                val user = authRepository.findUserByEmail(email)
+                if (user != null) {
+                    val code = Random.nextInt(100000, 999999).toString()
+                    if (authRepository.saveRecoveryCode(email, code)) {
+                        launch { EmailService.sendVerificationCode(user.nombre, email, code) }
+                        call.respond(RegisterResponse(true, "Código enviado"))
+                    } else {
+                        call.respond(RegisterResponse(false, "Error al generar código"))
+                    }
+                } else {
+                    call.respond(RegisterResponse(false, "El correo no está registrado"))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error en la solicitud"))
+            }
+        }
+
+        // --- RESTABLECER CONTRASEÑA ---
         post("/api/auth/reset-password") {
             try {
                 val request = call.receive<ResetPasswordRequest>()
@@ -164,28 +167,31 @@ fun Application.module() {
                 
                 if (authRepository.validateRecoveryCode(email, code)) {
                     if (authRepository.resetPassword(email, newPass)) {
-                        call.respond(RegisterResponse(true, "Contraseña actualizada"))
+                        val user = authRepository.findUserByEmail(email)
+                        call.respond(LoginResponse(true, "Contraseña actualizada", user))
                     } else {
-                        call.respond(HttpStatusCode.OK, RegisterResponse(false, "Error al actualizar"))
+                        call.respond(LoginResponse(false, "No se pudo actualizar"))
                     }
                 } else {
-                    call.respond(HttpStatusCode.OK, RegisterResponse(false, "Código inválido o expirado"))
+                    call.respond(LoginResponse(false, "Código inválido"))
                 }
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error: ${e.message}"))
+                call.respond(HttpStatusCode.BadRequest, LoginResponse(false, "Error al restablecer"))
             }
         }
 
-        post("/api/auth/update") {
+        // --- REGISTRO ---
+        post("/api/auth/register") {
             try {
                 val user = call.receive<User>()
-                if (authRepository.updateUser(user)) {
-                    call.respond(HttpStatusCode.OK, RegisterResponse(true, "Usuario actualizado"))
+                if (authRepository.registerUser(user)) {
+                    launch { EmailService.sendWelcomeEmail(user.nombre, user.email, user.rol) }
+                    call.respond(HttpStatusCode.Created, RegisterResponse(true, "Registro exitoso"))
                 } else {
-                    call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "No se encontró el ID"))
+                    call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error en DB"))
                 }
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error: ${e.message}"))
+                call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Datos inválidos"))
             }
         }
 
@@ -202,19 +208,6 @@ fun Application.module() {
                     else call.respond(HttpStatusCode.InternalServerError)
                 } catch (e: Exception) { call.respond(HttpStatusCode.BadRequest) }
             }
-            put("/{id}/validar") {
-                val id = call.parameters["id"]?.toLongOrNull() ?: return@put call.respond(HttpStatusCode.BadRequest)
-                val req = call.receive<ReporteStatusRequest>()
-                if (reportesRepository.updateReporteEstado(id, req.estado, req.validacionAdmin)) call.respond(HttpStatusCode.OK)
-                else call.respond(HttpStatusCode.NotFound)
-            }
-        }
-
-        get("/api/admin/stats") {
-            val est = authRepository.getAllUsersByRol("estudiante").size
-            val cho = authRepository.getAllUsersByRol("chofer").size
-            val rut = rutasRepository.getRutasCount()
-            call.respond(mapOf("estudiantes" to est, "choferes" to cho, "rutas" to rut))
         }
     }
 }

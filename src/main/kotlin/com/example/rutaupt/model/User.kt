@@ -18,8 +18,10 @@ data class User(
 
 @Serializable
 data class LoginRequest(
-    val email: String,
-    val pass: String
+    val email: String? = null,
+    val mail: String? = null,
+    val pass: String? = null,
+    val password: String? = null
 )
 
 @Serializable
@@ -37,5 +39,6 @@ data class RegisterResponse(
 
 @Serializable
 data class RecoveryRequest(
-    val email: String
+    val email: String? = null,
+    val mail: String? = null
 )
