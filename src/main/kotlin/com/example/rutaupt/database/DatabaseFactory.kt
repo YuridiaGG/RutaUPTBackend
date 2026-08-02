@@ -38,10 +38,10 @@ object DatabaseFactory {
             dbInstance = Database.connect(HikariDataSource(config))
 
             transaction(dbInstance) {
-                // Agregamos CodigosRecuperacion a la creación sincronizada
+                // Sincronizamos todas las tablas, incluyendo la nueva de Tokens
                 SchemaUtils.createMissingTablesAndColumns(
                     Usuarios, 
-                    CodigosRecuperacion, 
+                    TokensRecuperacion, 
                     Rutas, 
                     Paradas, 
                     Horarios, 
@@ -50,10 +50,9 @@ object DatabaseFactory {
                 )
                 seedUser("admin@upt.com", "Admin", "Admin", "admin")
             }
-            logger.info("Base de datos conectada y sincronizada (Host: $host)")
+            logger.info("Base de datos sincronizada correctamente.")
         } catch (e: Exception) {
-            logger.error("ERROR DE CONEXIÓN A DB: ${e.message}")
-            e.printStackTrace()
+            logger.error("ERROR EN DB: ${e.message}")
         }
     }
 

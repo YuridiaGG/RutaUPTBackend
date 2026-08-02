@@ -17,11 +17,11 @@ object Usuarios : Table("usuarios") {
     override val primaryKey = PrimaryKey(id)
 }
 
-object CodigosRecuperacion : Table("codigos_recuperacion") {
+object TokensRecuperacion : Table("tokens_recuperacion") {
     val id = integer("id").autoIncrement()
     val email = varchar("email", 100)
     val codigo = varchar("codigo", 6)
-    val expiracion = datetime("expiracion")
+    val expiracion = long("expiracion")
     override val primaryKey = PrimaryKey(id)
 }
 
