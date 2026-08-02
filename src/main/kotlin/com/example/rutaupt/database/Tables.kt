@@ -17,11 +17,12 @@ object Usuarios : Table("usuarios") {
     override val primaryKey = PrimaryKey(id)
 }
 
-object TokensRecuperacion : Table("tokens_recuperacion") {
+// Renombramos la tabla para forzar una estructura limpia y corregir fallos de validación
+object RecoveryTokens : Table("recovery_tokens") {
     val id = integer("id").autoIncrement()
     val email = varchar("email", 100)
-    val codigo = varchar("codigo", 6)
-    val expiracion = long("expiracion")
+    val code = varchar("code", 6)
+    val expiry = long("expiry")
     override val primaryKey = PrimaryKey(id)
 }
 

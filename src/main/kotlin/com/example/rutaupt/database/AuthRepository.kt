@@ -8,7 +8,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 
 class AuthRepository {
     suspend fun findUserByEmail(email: String): User? = dbQuery {
-        Usuarios.selectAll().where { Usuarios.email eq email.trim() }
+        Usuarios.selectAll().where { Usuarios.email.lowerCase() eq email.trim().lowercase() }
             .map { rowToUser(it) }
             .singleOrNull()
     }
@@ -18,7 +18,7 @@ class AuthRepository {
             Usuarios.insert {
                 it[Usuarios.nombre] = user.nombre
                 it[Usuarios.apellidos] = user.apellidos
-                it[Usuarios.email] = user.email.trim()
+                it[Usuarios.email] = user.email.trim().lowercase()
                 it[Usuarios.password] = user.password ?: ""
                 it[Usuarios.rol] = user.rol.lowercase()
                 it[Usuarios.edad] = user.edad
@@ -38,7 +38,7 @@ class AuthRepository {
         Usuarios.update({ Usuarios.id eq userId }) {
             it[Usuarios.nombre] = user.nombre
             it[Usuarios.apellidos] = user.apellidos
-            it[Usuarios.email] = user.email.trim()
+            it[Usuarios.email] = user.email.trim().lowercase()
             if (user.password != null) it[Usuarios.password] = user.password
             it[Usuarios.rol] = user.rol.lowercase()
             it[Usuarios.edad] = user.edad
@@ -49,49 +49,66 @@ class AuthRepository {
     }
 
     suspend fun getUserPassword(email: String): String? = dbQuery {
-        Usuarios.selectAll().where { Usuarios.email eq email.trim() }
+        Usuarios.selectAll().where { Usuarios.email.lowerCase() eq email.trim().lowercase() }
             .map { it[Usuarios.password] }
             .singleOrNull()
     }
 
-    // --- MÉTODOS DE RECUPERACIÓN CON CÓDIGO (USANDO TOKEN TABLE Y LONG TIMESTAMP) ---
+    // --- RECUPERACIÓN CON CÓDIGO (SINCRONIZADO CON RecoveryTokens) ---
 
-    suspend fun saveRecoveryCode(email: String, code: String): Boolean = dbQuery {
+    suspend fun saveRecoveryCode(email: String, recoveryCode: String): Boolean = dbQuery {
         val cleanEmail = email.trim().lowercase()
-        // Limpiamos tokens viejos
-        TokensRecuperacion.deleteWhere { TokensRecuperacion.email eq cleanEmail }
+        // Limpiamos códigos anteriores
+        RecoveryTokens.deleteWhere { RecoveryTokens.email.lowerCase() eq cleanEmail }
         
-        // Expiración en 10 minutos desde ahora (en milisegundos UTC)
+        // Expiración en 10 minutos (milisegundos universales)
         val expiracionMilis = Clock.System.now().plus(10, DateTimeUnit.MINUTE).toEpochMilliseconds()
         
-        TokensRecuperacion.insert {
-            it[TokensRecuperacion.email] = cleanEmail
-            it[TokensRecuperacion.codigo] = code.trim()
-            it[TokensRecuperacion.expiracion] = expiracionMilis
+        RecoveryTokens.insert {
+            it[RecoveryTokens.email] = cleanEmail
+            it[RecoveryTokens.code] = recoveryCode.trim()
+            it[RecoveryTokens.expiry] = expiracionMilis
         }.insertedCount > 0
     }
 
-    suspend fun validateRecoveryCode(email: String, code: String): Boolean = dbQuery {
+    suspend fun validateRecoveryCode(email: String, recoveryCode: String): Boolean = dbQuery {
         val cleanEmail = email.trim().lowercase()
-        val cleanCode = code.trim()
+        val cleanCode = recoveryCode.trim()
         val nowMilis = Clock.System.now().toEpochMilliseconds()
-        
-        println("Validando Token: $cleanEmail | $cleanCode | Tiempo actual: $nowMilis")
 
-        TokensRecuperacion.selectAll().where { 
-            (TokensRecuperacion.email eq cleanEmail) and 
-            (TokensRecuperacion.codigo eq cleanCode) and 
-            (TokensRecuperacion.expiracion greater nowMilis)
-        }.count() > 0L
+        // Buscamos el token en la tabla RecoveryTokens
+        val token = RecoveryTokens.selectAll()
+            .where { RecoveryTokens.email.lowerCase() eq cleanEmail }
+            .orderBy(RecoveryTokens.id to SortOrder.DESC)
+            .limit(1)
+            .singleOrNull()
+
+        if (token == null) {
+            println("VALIDACIÓN: No existe código para $cleanEmail")
+            return@dbQuery false
+        }
+
+        val dbCode = token[RecoveryTokens.code].trim()
+        val dbExp = token[RecoveryTokens.expiry]
+        
+        println("VALIDANDO: Email=$cleanEmail | AppCode=$cleanCode | DBCode=$dbCode | Exp=$dbExp | Now=$nowMilis")
+
+        val esValido = dbCode == cleanCode && dbExp > nowMilis
+        
+        if (esValido) println("¡ÉXITO: Código validado!")
+        else if (dbExp <= nowMilis) println("FALLO: El código expiró.")
+        else println("FALLO: El código no coincide.")
+
+        esValido
     }
 
     suspend fun resetPassword(email: String, newPass: String): Boolean = dbQuery {
         val cleanEmail = email.trim().lowercase()
-        val updated = Usuarios.update({ Usuarios.email eq cleanEmail }) {
+        val updated = Usuarios.update({ Usuarios.email.lowerCase() eq cleanEmail }) {
             it[password] = newPass
         }
         if (updated > 0) {
-            TokensRecuperacion.deleteWhere { TokensRecuperacion.email eq cleanEmail }
+            RecoveryTokens.deleteWhere { RecoveryTokens.email.lowerCase() eq cleanEmail }
             true
         } else false
     }

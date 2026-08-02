@@ -38,10 +38,10 @@ object DatabaseFactory {
             dbInstance = Database.connect(HikariDataSource(config))
 
             transaction(dbInstance) {
-                // Sincronizamos todas las tablas, incluyendo la nueva de Tokens
+                // Sincronizamos las tablas con el nombre correcto: RecoveryTokens
                 SchemaUtils.createMissingTablesAndColumns(
                     Usuarios, 
-                    TokensRecuperacion, 
+                    RecoveryTokens, 
                     Rutas, 
                     Paradas, 
                     Horarios, 
@@ -50,9 +50,9 @@ object DatabaseFactory {
                 )
                 seedUser("admin@upt.com", "Admin", "Admin", "admin")
             }
-            logger.info("Base de datos sincronizada correctamente.")
+            logger.info("Base de datos sincronizada con RecoveryTokens.")
         } catch (e: Exception) {
-            logger.error("ERROR EN DB: ${e.message}")
+            logger.error("FALLO EN DB: ${e.message}")
         }
     }
 

@@ -30,11 +30,24 @@ data class ParadaRequest(
 @Serializable
 data class ReporteStatusRequest(val estado: String, val validacionAdmin: String? = null)
 
+// Clases de petición más flexibles
 @Serializable
-data class VerifyCodeRequest(val email: String, val code: String)
+data class VerifyCodeRequest(
+    val email: String? = null,
+    val mail: String? = null,
+    val code: String? = null,
+    val codigo: String? = null
+)
 
 @Serializable
-data class ResetPasswordRequest(val email: String, val code: String, val newPassword: String)
+data class ResetPasswordRequest(
+    val email: String? = null,
+    val mail: String? = null,
+    val code: String? = null,
+    val codigo: String? = null,
+    val newPassword: String? = null,
+    val pass: String? = null
+)
 
 fun main() {
     embeddedServer(Netty, port = System.getenv("PORT")?.toInt() ?: 8080,
@@ -104,7 +117,7 @@ fun Application.module() {
             }
         }
 
-        // 1. Generar código y enviar email
+        // 1. Enviar código
         post("/api/auth/recover") {
             try {
                 val request = call.receive<RecoveryRequest>()
@@ -114,44 +127,51 @@ fun Application.module() {
                     if (authRepository.saveRecoveryCode(user.email, code)) {
                         val sent = EmailService.sendVerificationCode(user.nombre, user.email, code)
                         if (sent) call.respond(RegisterResponse(true, "Código enviado correctamente"))
-                        else call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error al enviar correo"))
+                        else call.respond(HttpStatusCode.OK, RegisterResponse(false, "Fallo al enviar correo"))
                     } else {
-                        call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error al generar código"))
+                        call.respond(HttpStatusCode.OK, RegisterResponse(false, "Error al generar código"))
                     }
                 } else {
-                    call.respond(HttpStatusCode.NotFound, RegisterResponse(false, "Email no registrado"))
+                    call.respond(HttpStatusCode.OK, RegisterResponse(false, "Email no registrado"))
                 }
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error: ${e.message}"))
             }
         }
 
-        // 2. Validar código
+        // 2. Validar código (Más flexible)
         post("/api/auth/validate-code") {
             try {
                 val request = call.receive<VerifyCodeRequest>()
-                if (authRepository.validateRecoveryCode(request.email, request.code)) {
+                val email = request.email ?: request.mail ?: ""
+                val code = request.code ?: request.codigo ?: ""
+                
+                if (authRepository.validateRecoveryCode(email, code)) {
                     call.respond(RegisterResponse(true, "Código válido"))
                 } else {
-                    call.respond(HttpStatusCode.Unauthorized, RegisterResponse(false, "Código inválido o expirado"))
+                    call.respond(HttpStatusCode.OK, RegisterResponse(false, "Código incorrecto o expirado"))
                 }
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error: ${e.message}"))
             }
         }
 
-        // 3. Cambiar contraseña con el código
+        // 3. Cambiar contraseña
         post("/api/auth/reset-password") {
             try {
                 val request = call.receive<ResetPasswordRequest>()
-                if (authRepository.validateRecoveryCode(request.email, request.code)) {
-                    if (authRepository.resetPassword(request.email, request.newPassword)) {
-                        call.respond(RegisterResponse(true, "Contraseña actualizada exitosamente"))
+                val email = request.email ?: request.mail ?: ""
+                val code = request.code ?: request.codigo ?: ""
+                val newPass = request.newPassword ?: request.pass ?: ""
+                
+                if (authRepository.validateRecoveryCode(email, code)) {
+                    if (authRepository.resetPassword(email, newPass)) {
+                        call.respond(RegisterResponse(true, "Contraseña actualizada"))
                     } else {
-                        call.respond(HttpStatusCode.InternalServerError, RegisterResponse(false, "Error al actualizar contraseña"))
+                        call.respond(HttpStatusCode.OK, RegisterResponse(false, "Error al actualizar"))
                     }
                 } else {
-                    call.respond(HttpStatusCode.Unauthorized, RegisterResponse(false, "Código inválido o expirado"))
+                    call.respond(HttpStatusCode.OK, RegisterResponse(false, "Código inválido o expirado"))
                 }
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, RegisterResponse(false, "Error: ${e.message}"))
@@ -171,107 +191,47 @@ fun Application.module() {
             }
         }
 
-        // --- RUTAS ---
-        get("/api/rutas") {
-            call.respond(rutasRepository.getAllRutas())
-        }
-
-        post("/api/rutas") {
-            try {
-                val request = call.receive<RutaModel>()
-                if (rutasRepository.addRuta(request.nombre, request.color)) {
-                    call.respond(HttpStatusCode.Created, mapOf("success" to true))
-                } else {
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false))
-                }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
-            }
-        }
-
-        // --- PARADAS ---
-        get("/api/paradas") {
-            call.respond(paradasRepository.getAllParadas())
-        }
-
+        // --- RUTAS / PARADAS / REPORTES ---
+        get("/api/rutas") { call.respond(rutasRepository.getAllRutas()) }
+        get("/api/paradas") { call.respond(paradasRepository.getAllParadas()) }
         post("/api/paradas") {
             try {
-                val request = call.receive<ParadaRequest>()
-                val nuevaParada = Parada(
-                    nombre = request.nombre,
-                    ubicacion = request.ubicacion,
-                    latitud = request.latitud,
-                    longitud = request.longitud
-                )
-                val idGenerado = paradasRepository.addParada(nuevaParada)
-                if (idGenerado != null) {
-                    call.respond(HttpStatusCode.Created, mapOf("success" to true, "id" to idGenerado))
-                } else {
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("success" to false, "message" to "Error en DB"))
-                }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("success" to false, "message" to e.message))
-            }
+                val req = call.receive<ParadaRequest>()
+                val id = paradasRepository.addParada(Parada(nombre = req.nombre, ubicacion = req.ubicacion, latitud = req.latitud, longitud = req.longitud))
+                if (id != null) call.respond(HttpStatusCode.Created, mapOf("success" to true, "id" to id))
+                else call.respond(HttpStatusCode.InternalServerError)
+            } catch (e: Exception) { call.respond(HttpStatusCode.BadRequest, e.message ?: "") }
         }
-
-        delete("/api/paradas/{id}") {
-            val id = call.parameters["id"]?.toIntOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
-            if (paradasRepository.deleteParadaById(id)) call.respond(HttpStatusCode.OK)
-            else call.respond(HttpStatusCode.NotFound)
-        }
-
+        
         // --- REPORTES ---
         route("/api/reportes") {
             get { call.respond(reportesRepository.getAllReportes()) }
             post {
                 try {
-                    val reporte = call.receive<ReporteUnidad>()
-                    val newId = reportesRepository.addReporte(reporte)
-                    if (newId != null) call.respond(HttpStatusCode.Created, mapOf("success" to true, "id" to newId))
+                    val rep = call.receive<ReporteUnidad>()
+                    val id = reportesRepository.addReporte(rep)
+                    if (id != null) call.respond(HttpStatusCode.Created, mapOf("success" to true, "id" to id))
                     else call.respond(HttpStatusCode.InternalServerError)
-                } catch (e: Exception) {
-                    call.respond(HttpStatusCode.BadRequest, e.message ?: "Error")
-                }
+                } catch (e: Exception) { call.respond(HttpStatusCode.BadRequest) }
             }
-            route("/{id}") {
-                put("/validar") {
-                    val id = call.parameters["id"]?.toLongOrNull() ?: return@put call.respond(HttpStatusCode.BadRequest)
-                    val request = call.receive<ReporteStatusRequest>()
-                    if (reportesRepository.updateReporteEstado(id, request.estado, request.validacionAdmin)) {
-                        call.respond(HttpStatusCode.OK, mapOf("success" to true))
-                    } else {
-                        call.respond(HttpStatusCode.NotFound)
-                    }
-                }
-                delete {
-                    val id = call.parameters["id"]?.toLongOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
-                    if (reportesRepository.deleteReporte(id)) call.respond(HttpStatusCode.OK, mapOf("success" to true))
-                    else call.respond(HttpStatusCode.NotFound)
-                }
+            put("/{id}/validar") {
+                val id = call.parameters["id"]?.toLongOrNull() ?: return@put call.respond(HttpStatusCode.BadRequest)
+                val req = call.receive<ReporteStatusRequest>()
+                if (reportesRepository.updateReporteEstado(id, req.estado, req.validacionAdmin)) call.respond(HttpStatusCode.OK)
+                else call.respond(HttpStatusCode.NotFound)
             }
         }
 
         // --- ADMIN ---
         get("/api/admin/stats") {
-            try {
-                val est = authRepository.getAllUsersByRol("estudiante").size
-                val cho = authRepository.getAllUsersByRol("chofer").size
-                val rut = rutasRepository.getRutasCount()
-                call.respond(mapOf("estudiantes" to est, "choferes" to cho, "rutas" to rut))
-            } catch (e: Exception) {
-                call.respond(mapOf("estudiantes" to 0, "choferes" to 0, "rutas" to 0))
-            }
+            val est = authRepository.getAllUsersByRol("estudiante").size
+            val cho = authRepository.getAllUsersByRol("chofer").size
+            val rut = rutasRepository.getRutasCount()
+            call.respond(mapOf("estudiantes" to est, "choferes" to cho, "rutas" to rut))
         }
-
         get("/api/admin/users/{rol}") {
             val rol = call.parameters["rol"] ?: "chofer"
             call.respond(authRepository.getAllUsersByRol(rol))
-        }
-
-        delete("/api/admin/users/{id}") {
-            val id = call.parameters["id"]?.toIntOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
-            if (authRepository.deleteUser(id)) call.respond(HttpStatusCode.OK)
-            else call.respond(HttpStatusCode.NotFound)
         }
     }
 }
