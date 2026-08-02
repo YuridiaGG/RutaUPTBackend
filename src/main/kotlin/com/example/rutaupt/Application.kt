@@ -139,8 +139,8 @@ fun Application.module() {
             }
         }
 
-        // 2. Validar código (Más flexible)
-        post("/api/auth/validate-code") {
+        // 2. Validar código (Corregido a verify-code para coincidir con la App)
+        post("/api/auth/verify-code") {
             try {
                 val request = call.receive<VerifyCodeRequest>()
                 val email = request.email ?: request.mail ?: ""
